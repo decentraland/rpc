@@ -1,4 +1,4 @@
-import { CallableProcedure, ClientModuleDefinition, RpcClient, RpcClientPort, RpcPortEvents } from "."
+import { CallableProcedureClient, ClientModuleDefinition, RpcClient, RpcClientPort, RpcPortEvents } from "."
 import { Transport } from "./types"
 import mitt from "mitt"
 
@@ -19,8 +19,9 @@ import { MessageDispatcher, messageNumberHandler } from "./message-number-handle
 import { pushableChannel } from "./push-channel"
 import { log } from "./logger"
 
-
 const EMPTY_U8 = new Uint8Array(0)
+const ackStreamMessage = new StreamMessage()
+ackStreamMessage.setMessageType(RpcMessageTypes.RPCMESSAGETYPES_STREAM_ACK)
 
 // @internal
 export function createPort(portId: number, portName: string, dispatcher: MessageDispatcher): RpcClientPort {
@@ -38,11 +39,8 @@ export function createPort(portId: number, portName: string, dispatcher: Message
       requestModuleMessage.setModuleName(moduleName)
       requestModuleMessage.setPortId(portId)
       requestModuleMessage.setMessageType(RpcMessageTypes.RPCMESSAGETYPES_REQUEST_MODULE)
-      log(`! Sending to server ${JSON.stringify(requestModuleMessage.toObject())}`)
       const ret = await dispatcher.request(requestModuleMessage)
-      log(`! Sent ${JSON.stringify(requestModuleMessage.toObject())}`)
       const parsedMessage = parseServerMessage(ret)
-      log(`! Receiving answer ${JSON.stringify(parsedMessage?.toObject())}`)
       if (parsedMessage instanceof RequestModuleResponse) {
         const ret: ClientModuleDefinition = {}
 
@@ -57,7 +55,7 @@ export function createPort(portId: number, portName: string, dispatcher: Message
   }
 }
 
-function streamFromDispatcher(dispatcher: MessageDispatcher, messageId: number): AsyncGenerator<Uint8Array> {
+function streamFromDispatcher(dispatcher: MessageDispatcher, streamMessage: StreamMessage): AsyncGenerator<Uint8Array> {
   const { iterable, push, close, fail } = pushableChannel<Uint8Array>()
   let wasClosed = false
 
@@ -73,30 +71,41 @@ function streamFromDispatcher(dispatcher: MessageDispatcher, messageId: number):
     }
   })
 
-  dispatcher.addListener(messageId, (reader) => {
+  function processMessage(message: StreamMessage) {
+    if (message.getClosed()) {
+      wasClosed = true
+      close()
+    } else {
+      const payload = message.getPayload_asU8()
+      if (payload && payload.length) {
+        push(payload)
+      }
+      ackStreamMessage.setMessageId(message.getMessageId())
+      ackStreamMessage.setSequenceId(message.getSequenceId())
+      ackStreamMessage.setPortId(message.getPortId())
+      ackStreamMessage.setAck(true)
+      dispatcher.transport.sendMessage(ackStreamMessage.serializeBinary())
+    }
+  }
+
+  dispatcher.addListener(streamMessage.getMessageId(), (reader) => {
     const message = parseServerMessage(reader)
 
     if (message instanceof StreamMessage) {
-      if (message.getClosed()) {
-        wasClosed = true
-        close()
-      } else {
-        const payload = message.getPayload_asU8()
-        if (payload && payload.length) {
-          push(payload)
-        }
-      }
+      processMessage(message)
     } else if (message instanceof RemoteError) {
       wasClosed = true
       fail(new Error(message.getErrorMessage() || "Unknown remote error"))
     }
   })
 
+  processMessage(streamMessage)
+
   return iterable
 }
 
 // @internal
-function createProcedure(portId: number, procedureId: number, dispatcher: MessageDispatcher): CallableProcedure {
+function createProcedure(portId: number, procedureId: number, dispatcher: MessageDispatcher): CallableProcedureClient {
   const callProcedurePacket = new Request()
   callProcedurePacket.setPortId(portId)
   callProcedurePacket.setProcedureId(procedureId)
@@ -109,16 +118,22 @@ function createProcedure(portId: number, procedureId: number, dispatcher: Messag
       callProcedurePacket.setPayload(EMPTY_U8)
     }
     const ret = parseServerMessage(await dispatcher.request(callProcedurePacket))
+
     if (ret instanceof Response) {
-      if (ret.getIsStream()) {
-        return streamFromDispatcher(dispatcher, ret.getMessageId())
+      const u8 = ret.getPayload_asU8()
+      if (u8.length) {
+        return u8
+      } else {
+        return undefined
       }
-      return ret.getPayload_asU8()
+    } else if (ret instanceof StreamMessage) {
+      return streamFromDispatcher(dispatcher, ret)
     }
   }
 }
 
-function parseServerMessage(reader: BinaryReader) {
+// @internal
+export function parseServerMessage(reader: BinaryReader) {
   const messageType = getMessageType(reader)
   reader.reset()
 
@@ -129,9 +144,8 @@ function parseServerMessage(reader: BinaryReader) {
       return Response.deserializeBinaryFromReader(new Response(), reader)
     case RpcMessageTypes.RPCMESSAGETYPES_REQUEST_MODULE_RESPONSE:
       return RequestModuleResponse.deserializeBinaryFromReader(new RequestModuleResponse(), reader)
-    default:
-      throw new Error(`Unknown message from RPC server: ${messageType}`)
-      return null
+    case RpcMessageTypes.RPCMESSAGETYPES_STREAM_MESSAGE:
+      return StreamMessage.deserializeBinaryFromReader(new StreamMessage(), reader)
   }
 }
 

@@ -8,13 +8,19 @@ import { BinaryReader } from 'google-protobuf';
 import { Emitter } from 'mitt';
 
 // @public (undocumented)
-export type AsyncProcedureResult = Promise<Uint8Array | AsyncGenerator<Uint8Array> | void>;
+export type AsyncProcedureResultClient = Promise<Uint8Array | AsyncGenerator<Uint8Array> | void>;
 
 // @public (undocumented)
-export type CallableProcedure = (payload: Uint8Array) => AsyncProcedureResult;
+export type AsyncProcedureResultServer = Promise<Uint8Array | void> | AsyncGenerator<Uint8Array>;
 
 // @public (undocumented)
-export type ClientModuleDefinition = Record<string, CallableProcedure>;
+export type CallableProcedureClient = (payload: Uint8Array) => AsyncProcedureResultClient;
+
+// @public (undocumented)
+export type CallableProcedureServer = (payload: Uint8Array) => AsyncProcedureResultServer;
+
+// @public (undocumented)
+export type ClientModuleDefinition = Record<string, CallableProcedureClient>;
 
 // Warning: (ae-forgotten-export) The symbol "MessageDispatcher" needs to be exported by the entry point index.d.ts
 //
@@ -38,7 +44,7 @@ export type CreateRpcServerOptions = {
 export function createServerPort(portId: number, portName: string): RpcServerPort;
 
 // @public (undocumented)
-export type ModuleGeneratorFunction = (port: RpcServerPort) => Promise<ClientModuleDefinition>;
+export type ModuleGeneratorFunction = (port: RpcServerPort) => Promise<ServerModuleDefinition>;
 
 // @public (undocumented)
 export type RpcClient = {
@@ -49,7 +55,7 @@ export type RpcClient = {
 export type RpcClientPort = Emitter<RpcPortEvents> & {
     readonly portId: number;
     readonly portName: string;
-    loadModule(moduleName: string): Promise<ClientModuleDefinition>;
+    loadModule(moduleName: string): Promise<unknown>;
     close(): void;
 };
 
@@ -85,8 +91,8 @@ export type RpcServerPort = Emitter<RpcPortEvents> & {
     readonly portId: number;
     readonly portName: string;
     registerModule(moduleName: string, moduleDefinition: ModuleGeneratorFunction): void;
-    loadModule(moduleName: string): Promise<ServerModuleDefinition>;
-    callProcedure(procedureId: number, argument: Uint8Array): AsyncProcedureResult;
+    loadModule(moduleName: string): Promise<ServerModuleDeclaration>;
+    callProcedure(procedureId: number, argument: Uint8Array): AsyncProcedureResultServer;
     close(): void;
 };
 
@@ -97,15 +103,18 @@ export type SendableMessage = {
 };
 
 // @public (undocumented)
-export type ServerModuleDefinition = {
+export type ServerModuleDeclaration = {
     procedures: ServerModuleProcedure[];
 };
+
+// @public (undocumented)
+export type ServerModuleDefinition = Record<string, CallableProcedureServer>;
 
 // @public (undocumented)
 export type ServerModuleProcedure = {
     procedureName: string;
     procedureId: number;
-    callable: CallableProcedure;
+    callable: CallableProcedureServer;
 };
 
 // @public (undocumented)

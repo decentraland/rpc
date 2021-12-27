@@ -1,5 +1,5 @@
 import {
-  CallableProcedure,
+  CallableProcedureServer,
   ModuleGeneratorFunction,
   RpcServer,
   RpcServerEvents,
@@ -18,12 +18,15 @@ import {
   Response,
   RpcMessageHeader,
   RpcMessageTypes,
-  StreamAck,
+  StreamMessage,
 } from "./protocol/index_pb"
 import { BinaryReader } from "google-protobuf"
 import { getMessageType } from "./proto-helpers"
-import { AsyncProcedureResult, ClientModuleDefinition, RpcPortEvents } from "."
+import { AsyncProcedureResultServer, RpcPortEvents, ServerModuleDeclaration } from "."
 import { log } from "./logger"
+import { AckDispatcher, createAckHelper } from "./ack-helper"
+
+declare var console: any
 
 export type CreateRpcServerOptions = {
   initializePort: (serverPort: RpcServerPort, transport: Transport) => Promise<void>
@@ -43,10 +46,12 @@ const reusedRequestModuleResponse = new RequestModuleResponse()
 reusedRequestModuleResponse.setMessageType(RpcMessageTypes.RPCMESSAGETYPES_REQUEST_MODULE_RESPONSE)
 const reusedResponse = new Response()
 reusedResponse.setMessageType(RpcMessageTypes.RPCMESSAGETYPES_RESPONSE)
+const reusedStreamMessage = new StreamMessage()
+reusedStreamMessage.setMessageType(RpcMessageTypes.RPCMESSAGETYPES_STREAM_MESSAGE)
 const reusedRemoteError = new RemoteError()
 reusedRemoteError.setMessageType(RpcMessageTypes.RPCMESSAGETYPES_REMOTE_ERROR_RESPONSE)
 
-function moduleProcedures(module: ClientModuleDefinition) {
+function moduleProcedures(module: ServerModuleDefinition) {
   return Array.from(Object.entries(module)).filter(([name, value]) => typeof value == "function")
 }
 
@@ -55,8 +60,8 @@ function moduleProcedures(module: ClientModuleDefinition) {
  */
 export function createServerPort(portId: number, portName: string): RpcServerPort {
   const events = mitt<RpcPortEvents>()
-  const loadedModules = new Map<string, Promise<ServerModuleDefinition>>()
-  const procedures = new Map<number, CallableProcedure>()
+  const loadedModules = new Map<string, Promise<ServerModuleDeclaration>>()
+  const procedures = new Map<number, CallableProcedureServer>()
   const registeredModules = new Map<string, ModuleGeneratorFunction>()
 
   const port: RpcServerPort = {
@@ -85,11 +90,11 @@ export function createServerPort(portId: number, portName: string): RpcServerPor
   }
 
   async function loadModuleFromGenerator(
-    moduleFuture: Promise<ClientModuleDefinition>
-  ): Promise<ServerModuleDefinition> {
+    moduleFuture: Promise<ServerModuleDefinition>
+  ): Promise<ServerModuleDeclaration> {
     const module = await moduleFuture
 
-    const ret: ServerModuleDefinition = {
+    const ret: ServerModuleDeclaration = {
       procedures: [],
     }
 
@@ -106,7 +111,7 @@ export function createServerPort(portId: number, portName: string): RpcServerPor
     return ret
   }
 
-  function loadModule(moduleName: string): Promise<ServerModuleDefinition> {
+  function loadModule(moduleName: string): Promise<ServerModuleDeclaration> {
     if (loadedModules.has(moduleName)) {
       return loadedModules.get(moduleName)!
     }
@@ -122,7 +127,7 @@ export function createServerPort(portId: number, portName: string): RpcServerPor
     return moduleFuture
   }
 
-  async function callProcedure(procedureId: number, payload: Uint8Array): AsyncProcedureResult {
+  function callProcedure(procedureId: number, payload: Uint8Array): AsyncProcedureResultServer {
     const procedure = procedures.get(procedureId)!
     if (!procedure) {
       throw new Error(`procedureId ${procedureId} is missing in ${portName} (${portId}))`)
@@ -133,7 +138,8 @@ export function createServerPort(portId: number, portName: string): RpcServerPor
   return port
 }
 
-function parseClientMessage(reader: BinaryReader) {
+// @internal
+export function parseClientMessage(reader: BinaryReader) {
   const messageType = getMessageType(reader)
   reader.reset()
 
@@ -143,11 +149,9 @@ function parseClientMessage(reader: BinaryReader) {
     case RpcMessageTypes.RPCMESSAGETYPES_CREATE_PORT:
       return CreatePort.deserializeBinaryFromReader(new CreatePort(), reader)
     case RpcMessageTypes.RPCMESSAGETYPES_STREAM_ACK:
-      return StreamAck.deserializeBinaryFromReader(new StreamAck(), reader)
+      return StreamMessage.deserializeBinaryFromReader(new StreamMessage(), reader)
     case RpcMessageTypes.RPCMESSAGETYPES_REQUEST_MODULE:
       return RequestModule.deserializeBinaryFromReader(new RequestModule(), reader)
-    default:
-      throw new Error(`Unknown message from RPC server: ${messageType}`)
   }
 }
 
@@ -156,6 +160,7 @@ export function createRpcServer(options: CreateRpcServerOptions): RpcServer {
   const transports = new Set<Transport>()
   const ports = new Map<number, RpcServerPort>()
   const portsByTransport = new Map<Transport, Map<number, RpcServerPort>>()
+
   let lastPortId = 0
 
   function closePort(port: RpcServerPort) {
@@ -187,7 +192,7 @@ export function createRpcServer(options: CreateRpcServerOptions): RpcServer {
     removeTransport(transport)
   }
 
-  function handleCreatePort(transport: Transport, createPortMessage: CreatePort) {
+  async function handleCreatePort(transport: Transport, createPortMessage: CreatePort) {
     lastPortId++
 
     const port = createServerPort(lastPortId, createPortMessage.getPortName())
@@ -197,101 +202,120 @@ export function createRpcServer(options: CreateRpcServerOptions): RpcServer {
     portsByTransport.set(transport, byTransport)
     ports.set(port.portId, port)
 
-    options
-      .initializePort(port, transport)
-      .then(() => {
-        log(`! Port created ${port.portId} ${port.portName}`)
-        reusedCreatePortResponse.setMessageId(createPortMessage.getMessageId())
-        reusedCreatePortResponse.setCreatedPortId(port.portId)
-        transport.sendMessage(reusedCreatePortResponse.serializeBinary())
-      })
-      .catch((err) => {
-        reusedRemoteError.setMessageId(createPortMessage.getMessageId())
-        reusedRemoteError.setErrorMessage(err.message)
-        transport.sendMessage(reusedRemoteError.serializeBinary())
-        events.emit("portClosed", { port })
-      })
+    await options.initializePort(port, transport)
+
+    log(`! Port created ${port.portId} ${port.portName}`)
+    reusedCreatePortResponse.setMessageId(createPortMessage.getMessageId())
+    reusedCreatePortResponse.setCreatedPortId(port.portId)
+    transport.sendMessage(reusedCreatePortResponse.serializeBinary())
   }
 
-  function handleRequestModule(transport: Transport, requestModule: RequestModule) {
+  async function handleRequestModule(transport: Transport, requestModule: RequestModule) {
     const port = portsByTransport.get(transport)?.get(requestModule.getPortId())
 
     if (!port) {
       throw new Error(`Cannot find port ${requestModule.getPortId()}`)
     }
 
-    port
-      .loadModule(requestModule.getModuleName())
-      .then((loadedModule) => {
-        reusedRequestModuleResponse.setMessageId(requestModule.getMessageId())
-        reusedRequestModuleResponse.setPortId(port.portId)
-        reusedRequestModuleResponse.setModuleName(requestModule.getModuleName())
-        reusedRequestModuleResponse.setProceduresList([])
-        for (const procedure of loadedModule.procedures) {
-          const n = new RequestModuleResponse.ModuleProcedure()
-          n.setProcedureId(procedure.procedureId)
-          n.setProcedureName(procedure.procedureName)
-          reusedRequestModuleResponse.addProcedures(n)
-        }
-        log(`! Sending to client ${JSON.stringify(reusedRequestModuleResponse.toObject())}`)
-        transport.sendMessage(reusedRequestModuleResponse.serializeBinary())
-      })
-      .catch((err) => {
-        reusedRemoteError.setMessageId(requestModule.getMessageId())
-        reusedRemoteError.setErrorMessage(err.message)
-        transport.sendMessage(reusedRemoteError.serializeBinary())
-        events.emit("portClosed", { port })
-      })
+    const loadedModule = await port.loadModule(requestModule.getModuleName())
+
+    reusedRequestModuleResponse.setMessageId(requestModule.getMessageId())
+    reusedRequestModuleResponse.setPortId(port.portId)
+    reusedRequestModuleResponse.setModuleName(requestModule.getModuleName())
+    reusedRequestModuleResponse.setProceduresList([])
+    for (const procedure of loadedModule.procedures) {
+      const n = new RequestModuleResponse.ModuleProcedure()
+      n.setProcedureId(procedure.procedureId)
+      n.setProcedureName(procedure.procedureName)
+      reusedRequestModuleResponse.addProcedures(n)
+    }
+    transport.sendMessage(reusedRequestModuleResponse.serializeBinary())
   }
-  
-  function handleRequest(transport: Transport, request: Request) {
-    const port = portsByTransport.get(transport)?.get(request.getPortId())
+
+  async function handleRequest(ackDispatcher: AckDispatcher, request: Request) {
+    const port = portsByTransport.get(ackDispatcher.transport)?.get(request.getPortId())
 
     if (!port) {
       reusedRemoteError.setMessageId(request.getMessageId())
-      reusedRemoteError.setErrorMessage('invalid portId')
-      transport.sendMessage(reusedRemoteError.serializeBinary())
+      reusedRemoteError.setErrorMessage("invalid portId")
+      ackDispatcher.transport.sendMessage(reusedRemoteError.serializeBinary())
       return
     }
 
-    port
-      .callProcedure(request.getProcedureId(), request.getPayload_asU8())
-      .then((result) => {
-        reusedResponse.setMessageId(request.getMessageId())
-        if(result instanceof Uint8Array) {
-          reusedResponse.setPayload(result)
-        } else if(!result) {
-          reusedResponse.clearPayload()
+    const result = await port.callProcedure(request.getProcedureId(), request.getPayload_asU8())
+
+    if (result instanceof Uint8Array) {
+      reusedResponse.setMessageId(request.getMessageId())
+      reusedResponse.setPayload(result)
+      ackDispatcher.transport.sendMessage(reusedResponse.serializeBinary())
+    } else if (result && Symbol.asyncIterator in result) {
+      const iter: AsyncGenerator<Uint8Array> = (result as any)[Symbol.asyncIterator]()
+      let sequenceNumber = -1
+      log("> Start iteration")
+      console.dir(iter)
+      for await (const elem of iter) {
+        sequenceNumber++
+        reusedStreamMessage.setSequenceId(sequenceNumber)
+        reusedStreamMessage.setMessageId(request.getMessageId())
+        reusedStreamMessage.setPayload(elem)
+        reusedStreamMessage.setPortId(request.getPortId())
+        log(`> Sending seq#${sequenceNumber}`)
+        const ret = await ackDispatcher.sendWithAck(reusedStreamMessage)
+        log(`> Got ack#${sequenceNumber}`)
+
+        if (ret.getAck()) {
+          continue
+        } else if (ret.getClosed()) {
+          break
         }
-        transport.sendMessage(reusedResponse.serializeBinary())
-      })
-      .catch((err) => {
-        reusedRemoteError.setMessageId(request.getMessageId())
-        reusedRemoteError.setErrorMessage(err.message)
-        transport.sendMessage(reusedRemoteError.serializeBinary())
-        events.emit("portClosed", { port })
-      })
+      }
+
+      reusedStreamMessage.setSequenceId(sequenceNumber)
+      reusedStreamMessage.setMessageId(request.getMessageId())
+      reusedStreamMessage.setPortId(request.getPortId())
+      reusedStreamMessage.clearPayload()
+      reusedStreamMessage.setClosed(true)
+      ackDispatcher.transport.sendMessage(reusedStreamMessage.serializeBinary())
+    } else {
+      reusedResponse.setMessageId(request.getMessageId())
+      reusedResponse.setPayload("")
+      ackDispatcher.transport.sendMessage(reusedResponse.serializeBinary())
+    }
+  }
+
+  function handleWithErrorMessage(
+    promise: Promise<any>,
+    parsedMessage: { getMessageId(): number },
+    transport: Transport
+  ) {
+    promise.catch((err) => {
+      reusedRemoteError.setMessageId(parsedMessage.getMessageId())
+      reusedRemoteError.setErrorMessage(err.message)
+      transport.sendMessage(reusedRemoteError.serializeBinary())
+    })
   }
 
   return {
     ...events,
     attachTransport(newTransport: Transport) {
       transports.add(newTransport)
+      const ackHelper = createAckHelper(newTransport)
       newTransport.on("message", (message) => {
         const reader = new BinaryReader(message)
         const parsedMessage = parseClientMessage(reader)
-        if (parsedMessage) {
-          log(`Server received #${parsedMessage.getMessageId()}: ${JSON.stringify(parsedMessage.toObject())}`)
-        }
         if (parsedMessage instanceof Request) {
-          handleRequest(newTransport, parsedMessage)
+          handleWithErrorMessage(handleRequest(ackHelper, parsedMessage), parsedMessage, newTransport)
         } else if (parsedMessage instanceof RequestModule) {
-          handleRequestModule(newTransport, parsedMessage)
+          handleWithErrorMessage(handleRequestModule(newTransport, parsedMessage), parsedMessage, newTransport)
         } else if (parsedMessage instanceof CreatePort) {
-          handleCreatePort(newTransport, parsedMessage)
+          handleWithErrorMessage(handleCreatePort(newTransport, parsedMessage), parsedMessage, newTransport)
+        } else if (parsedMessage instanceof StreamMessage) {
+          // noop
         } else {
-          log(`UNKNOWN MESSAGE #${parsedMessage?.getMessageId()}: ${JSON.stringify(parsedMessage?.toObject())}`)
-          handleTransportError(newTransport, new Error(`Unknown message ${JSON.stringify(parsedMessage?.toObject())}`))
+          handleTransportError(
+            newTransport,
+            new Error(`Unknown message ${JSON.stringify((parsedMessage as any)?.toObject())}`)
+          )
         }
       })
       newTransport.on("close", () => {

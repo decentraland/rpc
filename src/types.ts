@@ -25,20 +25,23 @@ export type Transport = Emitter<TransportEvents> & {
   close(): void
 }
 
-export type AsyncProcedureResult = Promise<Uint8Array | AsyncGenerator<Uint8Array> | void>
-export type CallableProcedure = (payload: Uint8Array) => AsyncProcedureResult
+export type AsyncProcedureResultServer = Promise<Uint8Array | void> | AsyncGenerator<Uint8Array>
+export type AsyncProcedureResultClient = Promise<Uint8Array | AsyncGenerator<Uint8Array> | void>
+export type CallableProcedureServer = (payload: Uint8Array) => AsyncProcedureResultServer
+export type CallableProcedureClient = (payload: Uint8Array) => AsyncProcedureResultClient
 
 export type ServerModuleProcedure = {
   procedureName: string
   procedureId: number
-  callable: CallableProcedure
+  callable: CallableProcedureServer
 }
 
-export type ServerModuleDefinition = {
+export type ServerModuleDeclaration = {
   procedures: ServerModuleProcedure[]
 }
 
-export type ClientModuleDefinition = Record<string, CallableProcedure>
+export type ServerModuleDefinition = Record<string, CallableProcedureServer>
+export type ClientModuleDefinition = Record<string, CallableProcedureClient>
 
 export type SendableMessage = {
   setMessageId(number: number): void
@@ -68,7 +71,7 @@ export type RpcClient = {
 ////////////////////////////// Rpc Server //////////////////////////////
 ////////////////////////////////////////////////////////////////////////
 
-export type ModuleGeneratorFunction = (port: RpcServerPort) => Promise<ClientModuleDefinition>
+export type ModuleGeneratorFunction = (port: RpcServerPort) => Promise<ServerModuleDefinition>
 
 export type RpcServerPort = Emitter<RpcPortEvents> & {
   readonly portId: number
@@ -80,8 +83,8 @@ export type RpcServerPort = Emitter<RpcPortEvents> & {
   /**
    * Used to load modules based on their definition and availability.
    */
-  loadModule(moduleName: string): Promise<ServerModuleDefinition>
-  callProcedure(procedureId: number, argument: Uint8Array): AsyncProcedureResult
+  loadModule(moduleName: string): Promise<ServerModuleDeclaration>
+  callProcedure(procedureId: number, argument: Uint8Array): AsyncProcedureResultServer
   close(): void
 }
 

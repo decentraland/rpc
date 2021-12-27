@@ -100,38 +100,21 @@ message RemoteError {
 message Response {
   /* <HEADER> */ int32 message_type = 1; int32 message_id = 2; /* </HEADER> */
 
-  oneof responses {
-      bytes payload = 5;      // the payload in case of a successful result
-      bool is_stream = 6;     // number when the client should expect an asynchronous stream of notifications
-  }
+  bytes payload = 6;      // the payload in case of a successful result
 }
 
 // StreamMessage are all the elements of a stream call. The intended use case
 // is to generate subscriptions and event listeners from the client side. It is
 // designed with async iterators in mind (think about js sagas).
-// Server->Client
+// Server->Client/Client->Server
 message StreamMessage {
   /* <HEADER> */ int32 message_type = 1; int32 message_id = 2; /* </HEADER> */
-
   int32 port_id = 3;          // used to multiplex transports
   int32 sequence_id = 4;      // sequence id of the StreamMessage, starting at 0
 
   oneof body {
-      bytes payload = 6;      // the payload in case of a successful result
-      bool  closed = 7;       // an empty message signaling the end of the stream
-  }
-}
-
-// streams support backpressure via ACK messages
-// Client->Server
-message StreamAck {
-  /* <HEADER> */ int32 message_type = 1; int32 message_id = 2; /* </HEADER> */
-
-  int32 port_id = 3;         // used to multiplex transports
-  int32 sequence_id = 4;
-
-  oneof result {
-      bool ack = 5;          // used for backpressure
-      bool closed = 6;       // an empty message signaling the end of the stream
+      bytes payload = 6;      // Server->Client the payload in case of a successful result
+      bool  closed = 7;       // Server->Client/Client->Server an empty message signaling the end of the stream
+      bool  ack = 8;          // Client->Server used for backpressure
   }
 }

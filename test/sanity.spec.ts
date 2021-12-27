@@ -1,29 +1,6 @@
-import { createRpcClient, createRpcServer, CreateRpcServerOptions, RpcClient } from "../src"
+import { RpcClient } from "../src"
 import { log } from "../src/logger"
-import { MemoryTransport } from "../src/transports/Memory"
-
-export function createSimpleTestEnvironment(options: CreateRpcServerOptions) {
-  const { client, server } = MemoryTransport()
-  let rpcClient: RpcClient
-  const rpcServer = createRpcServer(options)
-
-  it("starts the rpc client", async () => {
-    log("> Creating RPC Client")
-    setImmediate(() => rpcServer.attachTransport(server))
-    rpcClient = await createRpcClient(client)
-  })
-
-  return {
-    get rpcServer() {
-      if (!rpcServer) throw new Error("Must se the rpcServer only inside a `it`")
-      return rpcServer
-    },
-    get rpcClient() {
-      if (!rpcClient) throw new Error("Must se the rpcClient only inside a `it`")
-      return rpcClient
-    },
-  }
-}
+import { createSimpleTestEnvironment } from "./helpers"
 
 async function testPort(rpcClient: RpcClient, portName: string) {
   log(`> Creating Port ${portName}`)
@@ -33,6 +10,7 @@ async function testPort(rpcClient: RpcClient, portName: string) {
   const module = (await port.loadModule("echo")) as {
     basic(): Promise<Uint8Array>
     getPortId(): Promise<Uint8Array>
+    returnEmpty(): Promise<void>
     identity(data: Uint8Array): Promise<Uint8Array>
   }
 
@@ -40,6 +18,8 @@ async function testPort(rpcClient: RpcClient, portName: string) {
   expect(module).toHaveProperty("getPortId")
   expect(module).toHaveProperty("identity")
 
+  const resultEmpty = await module.returnEmpty()
+  expect(resultEmpty).toBeUndefined()
   const result = await module.basic()
   expect(result).toEqual(Uint8Array.from([0, 1, 2]))
   const getPortId = await module.getPortId()
@@ -52,11 +32,12 @@ async function testPort(rpcClient: RpcClient, portName: string) {
   return port
 }
 
-describe("Helpers req/res", () => {
+describe("Helpers simple req/res", () => {
   const testEnv = createSimpleTestEnvironment({
     async initializePort(port) {
       log(`! Initializing port ${port.portId} ${port.portName}`)
       port.registerModule("echo", async (port) => ({
+        async returnEmpty() {},
         async basic() {
           return Uint8Array.from([0, 1, 2])
         },
@@ -75,10 +56,7 @@ describe("Helpers req/res", () => {
 
     const port1 = await testPort(rpcClient, "port1")
     const port2 = await testPort(rpcClient, "port2")
-    const r1 = await testPort(rpcClient, "port3-repeated")
-    const r2 = await testPort(rpcClient, "port3-repeated")
-    expect(r1).toBe(r2)
-    expect(r1).not.toBe(port1)
+
     expect(port1).not.toBe(port2)
   })
 })

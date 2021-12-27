@@ -36,10 +36,10 @@ install: install_compiler
 	npm i -S @types/google-protobuf@latest
 
 test:
-	node_modules/.bin/jest --detectOpenHandles --colors --runInBand $(TESTARGS)
+	node_modules/.bin/jest --detectOpenHandles --colors --runInBand $(TESTARGS) --coverage
 
 test-watch:
-	node_modules/.bin/jest --detectOpenHandles --colors --runInBand --watch $(TESTARGS)
+	node_modules/.bin/jest --detectOpenHandles --colors --runInBand --watch $(TESTARGS) --coverage
 
 build:
 	${PROTOC} "--js_out=binary,import_style=commonjs_strict:$(PWD)/src/protocol" \

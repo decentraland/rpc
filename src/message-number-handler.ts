@@ -5,8 +5,6 @@ import future, { IFuture } from "fp-future"
 import { log } from "./logger"
 let globalMessageNumber = 0
 
-declare var console: any
-
 export type SendableMessage = {
   setMessageId(number: number): void
   serializeBinary(): Uint8Array
@@ -34,12 +32,10 @@ export function messageNumberHandler(transport: Transport): MessageDispatcher {
         reader.reset()
         fut.resolve(reader)
         oneTimeCallbacks.delete(messageId)
-        return
       }
       const handler = listeners.get(messageId)
       if (handler) {
-        reader.reset()
-        handler(reader)
+        handler(new BinaryReader(message))
       }
     }
   })
