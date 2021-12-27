@@ -2,7 +2,6 @@ import { BinaryReader } from "google-protobuf"
 import { Transport } from "."
 import { getMessageId } from "./proto-helpers"
 import future, { IFuture } from "fp-future"
-import { log } from "./logger"
 let globalMessageNumber = 0
 
 export type SendableMessage = {

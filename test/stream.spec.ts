@@ -1,5 +1,5 @@
 import { RpcClient } from "../src"
-import { log } from "../src/logger"
+import { log } from "./logger"
 import { createSimpleTestEnvironment } from "./helpers"
 
 async function testPort(rpcClient: RpcClient, portName: string) {

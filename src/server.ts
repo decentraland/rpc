@@ -23,11 +23,11 @@ import {
 import { BinaryReader } from "google-protobuf"
 import { getMessageType } from "./proto-helpers"
 import { AsyncProcedureResultServer, RpcPortEvents, ServerModuleDeclaration } from "."
-import { log } from "./logger"
 import { AckDispatcher, createAckHelper } from "./ack-helper"
 
-declare var console: any
-
+/**
+ * @public
+ */
 export type CreateRpcServerOptions = {
   initializePort: (serverPort: RpcServerPort, transport: Transport) => Promise<void>
 }
@@ -155,6 +155,9 @@ export function parseClientMessage(reader: BinaryReader) {
   }
 }
 
+/**
+ * @public
+ */
 export function createRpcServer(options: CreateRpcServerOptions): RpcServer {
   const events = mitt<RpcServerEvents>()
   const transports = new Set<Transport>()
@@ -204,7 +207,6 @@ export function createRpcServer(options: CreateRpcServerOptions): RpcServer {
 
     await options.initializePort(port, transport)
 
-    log(`! Port created ${port.portId} ${port.portName}`)
     reusedCreatePortResponse.setMessageId(createPortMessage.getMessageId())
     reusedCreatePortResponse.setCreatedPortId(port.portId)
     transport.sendMessage(reusedCreatePortResponse.serializeBinary())
@@ -251,17 +253,13 @@ export function createRpcServer(options: CreateRpcServerOptions): RpcServer {
     } else if (result && Symbol.asyncIterator in result) {
       const iter: AsyncGenerator<Uint8Array> = (result as any)[Symbol.asyncIterator]()
       let sequenceNumber = -1
-      log("> Start iteration")
-      console.dir(iter)
       for await (const elem of iter) {
         sequenceNumber++
         reusedStreamMessage.setSequenceId(sequenceNumber)
         reusedStreamMessage.setMessageId(request.getMessageId())
         reusedStreamMessage.setPayload(elem)
         reusedStreamMessage.setPortId(request.getPortId())
-        log(`> Sending seq#${sequenceNumber}`)
         const ret = await ackDispatcher.sendWithAck(reusedStreamMessage)
-        log(`> Got ack#${sequenceNumber}`)
 
         if (ret.getAck()) {
           continue

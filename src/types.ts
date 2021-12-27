@@ -1,10 +1,13 @@
 import { Emitter } from "mitt"
 
+/**
+ * @public
+ */
 export type TransportEvents = {
   /**
    * The connect event is emited when the transport gets connected.
    *
-   * The RpcServer is in charge to send the notification (bytes[1]{0x0})
+   * The RpcServer is in charge to send the notification (bytes[1]\{0x0\})
    * to signal the client transport that it is connected.
    */
   connect: {}
@@ -19,30 +22,55 @@ export type TransportEvents = {
   close: {}
 }
 
+/**
+ * @public
+ */
 export type Transport = Emitter<TransportEvents> & {
   /** sendMessage is used to send a message through the transport */
   sendMessage(message: Uint8Array): void
   close(): void
 }
-
+/**
+ * @public
+ */
 export type AsyncProcedureResultServer = Promise<Uint8Array | void> | AsyncGenerator<Uint8Array>
+/**
+ * @public
+ */
 export type AsyncProcedureResultClient = Promise<Uint8Array | AsyncGenerator<Uint8Array> | void>
+/**
+ * @public
+ */
 export type CallableProcedureServer = (payload: Uint8Array) => AsyncProcedureResultServer
+/**
+ * @public
+ */
 export type CallableProcedureClient = (payload: Uint8Array) => AsyncProcedureResultClient
-
+/**
+ * @public
+ */
 export type ServerModuleProcedure = {
   procedureName: string
   procedureId: number
   callable: CallableProcedureServer
 }
-
+/**
+ * @public
+ */
 export type ServerModuleDeclaration = {
   procedures: ServerModuleProcedure[]
 }
-
+/**
+ * @public
+ */
 export type ServerModuleDefinition = Record<string, CallableProcedureServer>
+/**
+ * @public
+ */
 export type ClientModuleDefinition = Record<string, CallableProcedureClient>
-
+/**
+ * @public
+ */
 export type SendableMessage = {
   setMessageId(number: number): void
   serializeBinary(): Uint8Array
@@ -52,10 +80,16 @@ export type SendableMessage = {
 ////////////////////////////// Rpc Client //////////////////////////////
 ////////////////////////////////////////////////////////////////////////
 
+/**
+ * @public
+ */
 export type RpcPortEvents = {
   close: {}
 }
 
+/**
+ * @public
+ */
 export type RpcClientPort = Emitter<RpcPortEvents> & {
   readonly portId: number
   readonly portName: string
@@ -63,6 +97,9 @@ export type RpcClientPort = Emitter<RpcPortEvents> & {
   close(): void
 }
 
+/**
+ * @public
+ */
 export type RpcClient = {
   createPort(portName: string): Promise<RpcClientPort>
 }
@@ -71,8 +108,14 @@ export type RpcClient = {
 ////////////////////////////// Rpc Server //////////////////////////////
 ////////////////////////////////////////////////////////////////////////
 
+/**
+ * @public
+ */
 export type ModuleGeneratorFunction = (port: RpcServerPort) => Promise<ServerModuleDefinition>
 
+/**
+ * @public
+ */
 export type RpcServerPort = Emitter<RpcPortEvents> & {
   readonly portId: number
   readonly portName: string
@@ -88,6 +131,9 @@ export type RpcServerPort = Emitter<RpcPortEvents> & {
   close(): void
 }
 
+/**
+ * @public
+ */
 export type RpcServerEvents = {
   portCreated: { port: RpcServerPort }
   portClosed: { port: RpcServerPort }
@@ -105,6 +151,7 @@ export type RpcServerEvents = {
  * are closed.
  *
  * The RpcServer also generates the portIds.
+ * @public
  */
 export type RpcServer = Emitter<RpcServerEvents> & {
   attachTransport(transport: Transport): void

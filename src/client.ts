@@ -17,7 +17,6 @@ import { BinaryReader } from "google-protobuf"
 import { getMessageType } from "./proto-helpers"
 import { MessageDispatcher, messageNumberHandler } from "./message-number-handler"
 import { pushableChannel } from "./push-channel"
-import { log } from "./logger"
 
 const EMPTY_U8 = new Uint8Array(0)
 const ackStreamMessage = new StreamMessage()
@@ -149,6 +148,9 @@ export function parseServerMessage(reader: BinaryReader) {
   }
 }
 
+/**
+ * @public
+ */
 export async function createRpcClient(transport: Transport): Promise<RpcClient> {
   const clientPortByName = new Map<string, Promise<RpcClientPort>>()
 

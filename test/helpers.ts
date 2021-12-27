@@ -1,6 +1,6 @@
 import { BinaryReader } from "google-protobuf"
 import { createRpcClient, createRpcServer, CreateRpcServerOptions, parseClientMessage, parseServerMessage, RpcClient } from "../src"
-import { log } from "../src/logger"
+import { log } from "./logger"
 import { MemoryTransport } from "../src/transports/Memory"
 
 export function createSimpleTestEnvironment(options: CreateRpcServerOptions) {

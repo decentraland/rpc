@@ -4,9 +4,7 @@
 
 ```ts
 
-import { BinaryReader } from 'google-protobuf';
 import { Emitter } from 'mitt';
-import * as jspb from 'google-protobuf';
 
 // @public (undocumented)
 export type AsyncProcedureResultClient = Promise<Uint8Array | AsyncGenerator<Uint8Array> | void>;
@@ -23,11 +21,6 @@ export type CallableProcedureServer = (payload: Uint8Array) => AsyncProcedureRes
 // @public (undocumented)
 export type ClientModuleDefinition = Record<string, CallableProcedureClient>;
 
-// Warning: (ae-forgotten-export) The symbol "MessageDispatcher" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export function createPort(portId: number, portName: string, dispatcher: MessageDispatcher): RpcClientPort;
-
 // @public (undocumented)
 export function createRpcClient(transport: Transport): Promise<RpcClient>;
 
@@ -39,28 +32,8 @@ export type CreateRpcServerOptions = {
     initializePort: (serverPort: RpcServerPort, transport: Transport) => Promise<void>;
 };
 
-// Warning: (ae-internal-missing-underscore) The name "createServerPort" should be prefixed with an underscore because the declaration is marked as @internal
-//
-// @internal (undocumented)
-export function createServerPort(portId: number, portName: string): RpcServerPort;
-
 // @public (undocumented)
 export type ModuleGeneratorFunction = (port: RpcServerPort) => Promise<ServerModuleDefinition>;
-
-// Warning: (ae-forgotten-export) The symbol "StreamMessage" needs to be exported by the entry point index.d.ts
-// Warning: (ae-forgotten-export) The symbol "Request" needs to be exported by the entry point index.d.ts
-// Warning: (ae-forgotten-export) The symbol "CreatePort" needs to be exported by the entry point index.d.ts
-// Warning: (ae-forgotten-export) The symbol "RequestModule" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export function parseClientMessage(reader: BinaryReader): StreamMessage | Request | CreatePort | RequestModule | undefined;
-
-// Warning: (ae-forgotten-export) The symbol "CreatePortResponse" needs to be exported by the entry point index.d.ts
-// Warning: (ae-forgotten-export) The symbol "RequestModuleResponse" needs to be exported by the entry point index.d.ts
-// Warning: (ae-forgotten-export) The symbol "Response" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export function parseServerMessage(reader: BinaryReader): StreamMessage | CreatePortResponse | RequestModuleResponse | Response | undefined;
 
 // @public (undocumented)
 export type RpcClient = {
