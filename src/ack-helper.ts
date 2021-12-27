@@ -1,5 +1,5 @@
 import { BinaryReader } from "google-protobuf"
-import { Transport } from "."
+import { Transport } from "./types"
 import { getMessageType } from "./proto-helpers"
 import { RpcMessageTypes, StreamMessage } from "./protocol/index_pb"
 
