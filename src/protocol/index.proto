@@ -1,0 +1,137 @@
+syntax = "proto3";
+
+/////////////////////////////////////////////////////////////
+/////////////////////// Wire protocol ///////////////////////
+/////////////////////////////////////////////////////////////
+
+// every message implements this header
+message RpcMessageHeader {
+  int32 message_type = 1; // (RpcMessageTypes) message_type is always the first element
+  int32 message_id   = 2; // message_id is always the second element
+}
+
+enum RpcMessageTypes {
+  RpcMessageTypes_SERVER_READY = 0;
+  RpcMessageTypes_REQUEST = 1;
+  RpcMessageTypes_RESPONSE = 2;
+  RpcMessageTypes_STREAM_MESSAGE = 3;
+  RpcMessageTypes_STREAM_ACK = 4;
+  RpcMessageTypes_CREATE_PORT = 5;
+  RpcMessageTypes_CREATE_PORT_RESPONSE = 6;
+  RpcMessageTypes_REQUEST_MODULE = 7;
+  RpcMessageTypes_REQUEST_MODULE_RESPONSE = 8;
+  RpcMessageTypes_REMOTE_ERROR_RESPONSE = 9;
+}
+
+/////////////////////////////////////////////////////////////
+/////////////////////// Port loading ////////////////////////
+/////////////////////////////////////////////////////////////
+
+// Client->Server
+message CreatePort {
+  /* <HEADER> */ int32 message_type = 1; int32 message_id = 2; /* </HEADER> */
+
+  string port_name = 3;
+}
+
+// Server->Client
+message CreatePortResponse {
+  /* <HEADER> */ int32 message_type = 1; int32 message_id = 2; /* </HEADER> */
+
+  int32 created_port_id = 3;  // id of the freshly created port
+}
+
+// Client->Server
+message ClosePort {
+  /* <HEADER> */ int32 message_type = 1; int32 message_id = 2; /* </HEADER> */
+
+  int32 created_port_id = 3;  // id of the freshly created port
+}
+
+/////////////////////////////////////////////////////////////
+////////////////////// Module loading ///////////////////////
+/////////////////////////////////////////////////////////////
+
+// Client->Server
+message RequestModule {
+  /* <HEADER> */ int32 message_type = 1; int32 message_id = 2; /* </HEADER> */
+
+  int32  port_id = 3;         // used to multiplex transports
+  string module_name = 4;
+}
+
+// Server->Client
+message RequestModuleResponse {
+  /* <HEADER> */ int32 message_type = 1; int32 message_id = 2; /* </HEADER> */
+
+  int32  port_id = 3; // port_id is used to multiplex transports
+  string module_name = 4;
+  repeated ModuleProcedure procedures = 5;
+
+  message ModuleProcedure {
+      int32  procedure_id = 1;
+      string procedure_name = 2;
+      // we can possibly define some parameter information.
+      // It is not really necessary now.
+  }
+}
+
+/////////////////////////////////////////////////////////////
+//////////////////////////// RPC ////////////////////////////
+/////////////////////////////////////////////////////////////
+
+// Client->Server
+message Request {
+  /* <HEADER> */ int32 message_type = 1; int32 message_id = 2; /* </HEADER> */
+
+  int32 port_id = 3;          // used to multiplex transports
+  int32 procedure_id = 4;     // id of the procedure to be called
+  bytes payload = 5;          // payload of the request (this protocol doesn't care about the content)
+}
+
+// Server->Client
+message RemoteError {
+  /* <HEADER> */ int32 message_type = 1; int32 message_id = 2; /* </HEADER> */
+  int32 error_code = 3;
+  string error_message = 4;
+}
+
+// Server->Client
+message Response {
+  /* <HEADER> */ int32 message_type = 1; int32 message_id = 2; /* </HEADER> */
+
+  oneof responses {
+      bytes payload = 5;      // the payload in case of a successful result
+      bool is_stream = 6;     // number when the client should expect an asynchronous stream of notifications
+  }
+}
+
+// StreamMessage are all the elements of a stream call. The intended use case
+// is to generate subscriptions and event listeners from the client side. It is
+// designed with async iterators in mind (think about js sagas).
+// Server->Client
+message StreamMessage {
+  /* <HEADER> */ int32 message_type = 1; int32 message_id = 2; /* </HEADER> */
+
+  int32 port_id = 3;          // used to multiplex transports
+  int32 sequence_id = 4;      // sequence id of the StreamMessage, starting at 0
+
+  oneof body {
+      bytes payload = 6;      // the payload in case of a successful result
+      bool  closed = 7;       // an empty message signaling the end of the stream
+  }
+}
+
+// streams support backpressure via ACK messages
+// Client->Server
+message StreamAck {
+  /* <HEADER> */ int32 message_type = 1; int32 message_id = 2; /* </HEADER> */
+
+  int32 port_id = 3;         // used to multiplex transports
+  int32 sequence_id = 4;
+
+  oneof result {
+      bool ack = 5;          // used for backpressure
+      bool closed = 6;       // an empty message signaling the end of the stream
+  }
+}
