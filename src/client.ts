@@ -163,7 +163,7 @@ export async function createRpcClient(transport: Transport): Promise<RpcClient> 
     const ret = await dispatcher.request(createPortMessage)
     const parsedMessage = parseServerMessage(ret)
     if (parsedMessage instanceof CreatePortResponse) {
-      const portId = parsedMessage.getCreatedPortId()
+      const portId = parsedMessage.getPortId()
       return createPort(portId, portName, dispatcher)
     }
     throw new Error("Unknown response received from server.")

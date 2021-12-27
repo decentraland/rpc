@@ -11,6 +11,7 @@ import mitt from "mitt"
 import {
   CreatePort,
   CreatePortResponse,
+  ModuleProcedure,
   RemoteError,
   Request,
   RequestModule,
@@ -208,7 +209,7 @@ export function createRpcServer(options: CreateRpcServerOptions): RpcServer {
     await options.initializePort(port, transport)
 
     reusedCreatePortResponse.setMessageId(createPortMessage.getMessageId())
-    reusedCreatePortResponse.setCreatedPortId(port.portId)
+    reusedCreatePortResponse.setPortId(port.portId)
     transport.sendMessage(reusedCreatePortResponse.serializeBinary())
   }
 
@@ -223,10 +224,9 @@ export function createRpcServer(options: CreateRpcServerOptions): RpcServer {
 
     reusedRequestModuleResponse.setMessageId(requestModule.getMessageId())
     reusedRequestModuleResponse.setPortId(port.portId)
-    reusedRequestModuleResponse.setModuleName(requestModule.getModuleName())
     reusedRequestModuleResponse.setProceduresList([])
     for (const procedure of loadedModule.procedures) {
-      const n = new RequestModuleResponse.ModuleProcedure()
+      const n = new ModuleProcedure()
       n.setProcedureId(procedure.procedureId)
       n.setProcedureName(procedure.procedureName)
       reusedRequestModuleResponse.addProcedures(n)
@@ -271,7 +271,7 @@ export function createRpcServer(options: CreateRpcServerOptions): RpcServer {
       reusedStreamMessage.setSequenceId(sequenceNumber)
       reusedStreamMessage.setMessageId(request.getMessageId())
       reusedStreamMessage.setPortId(request.getPortId())
-      reusedStreamMessage.clearPayload()
+      reusedStreamMessage.setPayload("")
       reusedStreamMessage.setClosed(true)
       ackDispatcher.transport.sendMessage(reusedStreamMessage.serializeBinary())
     } else {

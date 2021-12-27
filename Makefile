@@ -42,6 +42,7 @@ test-watch:
 	node_modules/.bin/jest --detectOpenHandles --colors --runInBand --watch $(TESTARGS) --coverage
 
 build:
+	node_modules/.bin/ts-node scripts/generate-proto-file.ts
 	@rm -rf dist || true
 	@mkdir -p dist
 	${PROTOC} "--js_out=binary,import_style=commonjs_strict:$(PWD)/src/protocol" \
