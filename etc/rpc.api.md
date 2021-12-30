@@ -46,6 +46,7 @@ export type RpcClientPort = Emitter<RpcPortEvents> & {
     readonly portName: string;
     loadModule(moduleName: string): Promise<unknown>;
     close(): void;
+    readonly state: 'open' | 'closed';
 };
 
 // @public (undocumented)
