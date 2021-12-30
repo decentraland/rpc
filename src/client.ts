@@ -120,7 +120,7 @@ export function streamFromDispatcher(
       isRemoteClosed = true
       failAndClose(new Error("RemoteError: " + (message.getErrorMessage() || "Unknown remote error")))
     } else {
-      throw new Error("????")
+      failAndClose(new Error("RemoteError: Protocol error"))
     }
   })
 

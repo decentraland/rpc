@@ -87,7 +87,10 @@ export function createServerPort(portId: number, portName: string): RpcServerPor
   }
 
   async function close() {
-    throw new Error("close() not implemented")
+    loadedModules.clear()
+    procedures.clear()
+    registeredModules.clear()
+    events.emit("close", {})
   }
 
   async function registerModule(moduleName: string, generator: ModuleGeneratorFunction) {
@@ -220,6 +223,10 @@ export async function handleRequest(ackDispatcher: AckDispatcher, request: Reque
     const reusedStreamMessage = new StreamMessage()
     reusedStreamMessage.setMessageType(RpcMessageTypes.RPCMESSAGETYPES_STREAM_MESSAGE)
 
+    const transportClosedRejection = new Promise<StreamMessage>((_, reject) =>
+      ackDispatcher.transport.on("close", reject)
+    )
+
     for await (const elem of iter) {
       sequenceNumber++
       reusedStreamMessage.setClosed(false)
@@ -228,7 +235,8 @@ export async function handleRequest(ackDispatcher: AckDispatcher, request: Reque
       reusedStreamMessage.setMessageId(request.getMessageId())
       reusedStreamMessage.setPayload(elem)
       reusedStreamMessage.setPortId(request.getPortId())
-      const ret = await ackDispatcher.sendWithAck(reusedStreamMessage)
+      // we use Promise.race to react to the transport close events
+      const ret = await Promise.race([ackDispatcher.sendWithAck(reusedStreamMessage), transportClosedRejection])
 
       if (ret.getAck()) {
         continue
@@ -305,10 +313,7 @@ export function createRpcServer(options: CreateRpcServerOptions): RpcServer {
     } else if (parsedMessage instanceof StreamMessage) {
       // noop
     } else {
-      await handleTransportError(
-        transport,
-        new Error(`Unknown message ${JSON.stringify((parsedMessage as any)?.toObject())}`)
-      )
+      transport.emit("error", new Error(`Unknown message ${JSON.stringify((parsedMessage as any)?.toObject())}`))
     }
   }
 

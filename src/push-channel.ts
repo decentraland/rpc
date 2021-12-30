@@ -43,7 +43,7 @@ export function pushableChannel<T>(onIteratorClose: () => void) {
   }
 
   function yieldNextResult(): IteratorResult<T> | void {
-    if (error) {
+    if (error && queue.length == 0) {
       throw error
     }
     if (closed && queue.length == 0) {

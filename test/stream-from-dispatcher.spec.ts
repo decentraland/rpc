@@ -158,10 +158,33 @@ describe("streamFromDispatcher", () => {
     // the listener should have ended because we finished the stream at two
     expect(removeListenerSpy).toHaveBeenCalledWith(MESSAGE_ID)
 
-
-
     // rest of the stream can be consumed beacuse we have it in memory
     const rest = await takeAsync(stream, 2)
     expect(rest).toEqual([Uint8Array.from([3]), Uint8Array.from([4])])
+  })
+
+  it("closes the stream if the transport has an error", async () => {
+    let seq = 0
+    const MESSAGE_ID = 4
+    const transport = instrumentTransport(MemoryTransport())
+    const dispatcher = messageNumberHandler(transport.client)
+    const removeListenerSpy = jest.spyOn(dispatcher, "removeListener")
+    const stream = streamFromDispatcher(
+      dispatcher,
+      StreamMessage.deserializeBinary(streamMessage(MESSAGE_ID, seq++, 0, Uint8Array.from([1])))
+    )
+
+    expect(removeListenerSpy).not.toHaveBeenCalledWith(MESSAGE_ID)
+    transport.client.emit("error", new Error("TRANSPORT ERROR"))
+    expect(removeListenerSpy).toHaveBeenCalledWith(MESSAGE_ID)
+
+    // the listener should have ended because we finished the stream due to an error
+    let received: Uint8Array[] = []
+    await expect(async () => {
+      for await (const data of stream) {
+        received.push(data)
+      }
+    }).rejects.toThrow("RPC Transport failed")
+    expect(received).toEqual([Uint8Array.from([1])])
   })
 })
