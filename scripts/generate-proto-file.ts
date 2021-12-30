@@ -28,6 +28,7 @@ proto.addEnum("RpcMessageTypes", {
   REQUEST_MODULE: 7,
   REQUEST_MODULE_RESPONSE: 8,
   REMOTE_ERROR_RESPONSE: 9,
+  DESTROY_PORT: 10,
 
   SERVER_READY: 100,
 })
@@ -51,6 +52,9 @@ proto.addMessage("CreatePortResponse", [PORT_ID], ["RpcMessageHeader"])
 
 // Client->Server
 proto.addMessage("RequestModule", [PORT_ID, field("string", "module_name", 4)], ["RpcMessageHeader"])
+
+// Client->Server
+proto.addMessage("DestroyPort", [PORT_ID], ["RpcMessageHeader"])
 
 // Server->Client
 proto.addMessage(

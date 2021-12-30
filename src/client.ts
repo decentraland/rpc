@@ -4,6 +4,7 @@ import mitt from "mitt"
 import {
   CreatePort,
   CreatePortResponse,
+  DestroyPort,
   RemoteError,
   Request,
   RequestModule,
@@ -23,12 +24,22 @@ const EMPTY_U8 = new Uint8Array(0)
 export function createPort(portId: number, portName: string, dispatcher: MessageDispatcher): RpcClientPort {
   const events = mitt<RpcPortEvents>()
 
+  let state: "open" | "closed" = "open"
+  events.on("close", () => (state = "closed"))
+
   return {
     ...events,
     portName,
     portId,
+    get state() {
+      return state
+    },
     close() {
-      throw new Error("close() not implemented yet")
+      const m = new DestroyPort()
+      m.setPortId(portId)
+      m.setMessageType(RpcMessageTypes.RPCMESSAGETYPES_DESTROY_PORT)
+      dispatcher.transport.sendMessage(m.serializeBinary())
+      events.emit("close", {})
     },
     async loadModule(moduleName: string) {
       const requestModuleMessage = new RequestModule()
@@ -198,8 +209,17 @@ export async function createRpcClient(transport: Transport): Promise<RpcClient> 
       if (clientPortByName.has(portName)) {
         return clientPortByName.get(portName)!
       }
-      const port = internalCreatePort(portName)
-      clientPortByName.set(portName, port)
+      const portFuture = internalCreatePort(portName)
+      clientPortByName.set(portName, portFuture)
+
+      const port = await portFuture
+
+      port.on("close", () => {
+        if (clientPortByName.get(portName) === portFuture) {
+          clientPortByName.delete(portName)
+        }
+      })
+
       return port
     },
   }

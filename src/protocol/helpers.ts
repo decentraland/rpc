@@ -2,6 +2,7 @@ import { BinaryReader } from "google-protobuf"
 import {
   CreatePort,
   CreatePortResponse,
+  DestroyPort,
   RemoteError,
   Request,
   RequestModule,
@@ -106,6 +107,8 @@ export function parseProtocolMessage(reader: BinaryReader) {
       return StreamMessage.deserializeBinaryFromReader(new StreamMessage(), reader)
     case RpcMessageTypes.RPCMESSAGETYPES_REQUEST_MODULE:
       return RequestModule.deserializeBinaryFromReader(new RequestModule(), reader)
+    case RpcMessageTypes.RPCMESSAGETYPES_DESTROY_PORT:
+      return DestroyPort.deserializeBinaryFromReader(new DestroyPort(), reader)
   }
 
   debugger

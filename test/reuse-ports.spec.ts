@@ -1,5 +1,4 @@
 import { RpcClient } from "../src"
-import { log } from "./logger"
 import { createSimpleTestEnvironment } from "./helpers"
 
 async function testPort(rpcClient: RpcClient, portName: string) {
@@ -38,5 +37,34 @@ describe("Helpers simple req/res", () => {
     expect(r1).toBe(r2)
     expect(r1).not.toBe(port1)
     expect(port1).not.toBe(port2)
+  })
+})
+
+describe("Close ports", () => {
+  const testEnv = createSimpleTestEnvironment({
+    async initializePort(port) {
+      port.registerModule("echo", async (port) => ({
+        async getPortId() {
+          return Uint8Array.from([port.portId % 0xff])
+        },
+      }))
+    },
+  })
+
+  it("When reusing open ports it returns the same ports", async () => {
+    const { rpcClient } = testEnv
+
+    const port1 = await testPort(rpcClient, "port")
+    const port2 = await testPort(rpcClient, "port")
+    expect(port1.state).toEqual("open")
+    expect(port1).toEqual(port2)
+    port1.close()
+    expect(port1.state).toEqual("closed")
+
+    const port1_1 = await testPort(rpcClient, "port")
+    const port2_1 = await testPort(rpcClient, "port")
+    expect(port1_1).toEqual(port2_1)
+    expect(port1_1).not.toEqual(port1)
+    expect(port1_1.state).toEqual("open")
   })
 })

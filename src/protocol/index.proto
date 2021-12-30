@@ -16,6 +16,7 @@ enum RpcMessageTypes {
   RpcMessageTypes_REQUEST_MODULE = 7;
   RpcMessageTypes_REQUEST_MODULE_RESPONSE = 8;
   RpcMessageTypes_REMOTE_ERROR_RESPONSE = 9;
+  RpcMessageTypes_DESTROY_PORT = 10;
   RpcMessageTypes_SERVER_READY = 100;
 }
 
@@ -36,6 +37,12 @@ message RequestModule {
   int32	message_id = 2;
   int32	port_id = 3;
   string	module_name = 4;
+}
+
+message DestroyPort {
+  int32	message_type = 1;
+  int32	message_id = 2;
+  int32	port_id = 3;
 }
 
 message RequestModuleResponse {

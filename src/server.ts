@@ -11,6 +11,7 @@ import mitt from "mitt"
 import {
   CreatePort,
   CreatePortResponse,
+  DestroyPort,
   ModuleProcedure,
   RemoteError,
   Request,
@@ -174,6 +175,8 @@ export async function handleCreatePort(
   reusedCreatePortResponse.setMessageId(createPortMessage.getMessageId())
   reusedCreatePortResponse.setPortId(port.portId)
   transport.sendMessage(reusedCreatePortResponse.serializeBinary())
+
+  return port
 }
 
 // @internal
@@ -196,6 +199,15 @@ export async function handleRequestModule(transport: Transport, requestModule: R
     reusedRequestModuleResponse.addProcedures(n)
   }
   transport.sendMessage(reusedRequestModuleResponse.serializeBinary())
+}
+
+// @internal
+export async function handleDestroyPort(transport: Transport, request: DestroyPort, state: RpcServerState) {
+  const port = getPortFromState(request.getPortId(), transport, state)
+
+  if (port) {
+    port.emit("close", {})
+  }
 }
 
 // @internal
@@ -262,17 +274,12 @@ export function createRpcServer(options: CreateRpcServerOptions): RpcServer {
     transports: new Set(),
   }
 
-  function closePort(port: RpcServerPort) {
-    port.close()
-    events.emit("portClosed", { port })
-  }
-
   function removeTransport(transport: Transport) {
     const transportPorts = state.portsByTransport.get(transport)
     state.portsByTransport.delete(transport)
 
     if (transportPorts && transportPorts.size) {
-      transportPorts.forEach(closePort)
+      transportPorts.forEach(($) => $.close())
     }
 
     if (state.transports.delete(transport)) {
@@ -309,7 +316,10 @@ export function createRpcServer(options: CreateRpcServerOptions): RpcServer {
     } else if (parsedMessage instanceof RequestModule) {
       await handleRequestModule(transport, parsedMessage, state)
     } else if (parsedMessage instanceof CreatePort) {
-      await handleCreatePort(transport, parsedMessage, options, state)
+      const port = await handleCreatePort(transport, parsedMessage, options, state)
+      port.on("close", () => events.emit("portClosed", { port }))
+    } else if (parsedMessage instanceof DestroyPort) {
+      await handleDestroyPort(transport, parsedMessage, state)
     } else if (parsedMessage instanceof StreamMessage) {
       // noop
     } else {
@@ -333,6 +343,7 @@ export function createRpcServer(options: CreateRpcServerOptions): RpcServer {
       newTransport.on("close", () => {
         removeTransport(newTransport)
       })
+
       newTransport.on("error", (error) => {
         handleTransportError(newTransport, error)
       })
