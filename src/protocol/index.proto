@@ -6,7 +6,7 @@ message RpcMessageHeader {
 }
 
 enum RpcMessageTypes {
-  RpcMessageTypes_SERVER_READY = 0;
+  RpcMessageTypes_EMPTY = 0;
   RpcMessageTypes_REQUEST = 1;
   RpcMessageTypes_RESPONSE = 2;
   RpcMessageTypes_STREAM_MESSAGE = 3;
@@ -16,6 +16,7 @@ enum RpcMessageTypes {
   RpcMessageTypes_REQUEST_MODULE = 7;
   RpcMessageTypes_REQUEST_MODULE_RESPONSE = 8;
   RpcMessageTypes_REMOTE_ERROR_RESPONSE = 9;
+  RpcMessageTypes_SERVER_READY = 100;
 }
 
 message CreatePort {

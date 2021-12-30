@@ -17,7 +17,8 @@ const PORT_ID = field("int32", "port_id", 3)
 const PAYLOAD = field("bytes", "payload", 6)
 
 proto.addEnum("RpcMessageTypes", {
-  SERVER_READY: 0,
+  EMPTY: 0,
+
   REQUEST: 1,
   RESPONSE: 2,
   STREAM_MESSAGE: 3,
@@ -27,6 +28,8 @@ proto.addEnum("RpcMessageTypes", {
   REQUEST_MODULE: 7,
   REQUEST_MODULE_RESPONSE: 8,
   REMOTE_ERROR_RESPONSE: 9,
+
+  SERVER_READY: 100,
 })
 
 /////////////////////////////////////////////////////////////

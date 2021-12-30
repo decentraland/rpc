@@ -1,7 +1,6 @@
 import { BinaryReader } from "google-protobuf"
 import { Transport } from "."
-import { getMessageId } from "./proto-helpers"
-import future, { IFuture } from "fp-future"
+import { getMessageId } from "./protocol/helpers"
 let globalMessageNumber = 0
 
 export type SendableMessage = {
@@ -19,7 +18,8 @@ export type MessageDispatcher = {
 
 export function messageNumberHandler(transport: Transport): MessageDispatcher {
   // message_number -> future
-  const oneTimeCallbacks = new Map<number, IFuture<BinaryReader>>()
+  type ReaderCallback = (reader: BinaryReader) => void
+  const oneTimeCallbacks = new Map<number, ReaderCallback>()
   const listeners = new Map<number, (reader: BinaryReader) => void>()
 
   transport.on("message", (message) => {
@@ -29,7 +29,7 @@ export function messageNumberHandler(transport: Transport): MessageDispatcher {
       const fut = oneTimeCallbacks.get(messageId)
       if (fut) {
         reader.reset()
-        fut.resolve(reader)
+        fut(reader)
         oneTimeCallbacks.delete(messageId)
       }
       const handler = listeners.get(messageId)
@@ -51,11 +51,11 @@ export function messageNumberHandler(transport: Transport): MessageDispatcher {
     },
     async request(data: SendableMessage): Promise<BinaryReader> {
       const messageId = ++globalMessageNumber
-      const ret = future<BinaryReader>()
-      data.setMessageId(messageId)
-      oneTimeCallbacks.set(messageId, ret)
-      transport.sendMessage(data.serializeBinary())
-      return ret
+      return new Promise<BinaryReader>((resolve) => {
+        data.setMessageId(messageId)
+        oneTimeCallbacks.set(messageId, resolve)
+        transport.sendMessage(data.serializeBinary())
+      })
     },
   }
 }
