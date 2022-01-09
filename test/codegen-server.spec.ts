@@ -1,9 +1,8 @@
-import { Message } from "google-protobuf"
-import { RpcClient, RpcClientPort } from "../src"
-import { clientProcedureStream, clientProcedureUnary } from "../src/codegen"
+import { RpcServerPort } from "../src"
 import { Book, GetBookRequest, QueryBooksRequest } from "./codegen/client_pb"
 import { createSimpleTestEnvironment, takeAsync } from "./helpers"
-import { log } from "./logger"
+import * as codegen from "../src/codegen"
+import { loadBookService } from "./codegen-client.spec"
 
 /// service BookService {
 export type BookService = {
@@ -16,32 +15,32 @@ export type BookService = {
 
 const FAIL_WITH_EXCEPTION_ISBN = 1
 
-export function loadBookService(port: RpcClientPort): BookService {
-  const mod = port.loadModule('BookService')
-  return {
-    GetBook: clientProcedureUnary(mod, "GetBook", GetBookRequest, Book),
-    QueryBooks: clientProcedureStream(mod, "QueryBooks", QueryBooksRequest, Book),
-  }
+export type BookServiceModuleInitializator = (port: RpcServerPort) => Promise<BookService>
+
+export function registerBookService(port: RpcServerPort, moduleInitializator: BookServiceModuleInitializator): void {
+  port.registerModule("BookService", async (port) => {
+    const mod = await moduleInitializator(port)
+    return {
+      GetBook: codegen.serverProcedureUnary(mod["GetBook"].bind(mod), "GetBook", GetBookRequest, Book),
+      QueryBooks: codegen.serverProcedureStream(mod["QueryBooks"].bind(mod), "QueryBooks", QueryBooksRequest, Book),
+    }
+  })
 }
 
-describe("codegen client", () => {
+describe("codegen client & server", () => {
   const testEnv = createSimpleTestEnvironment({
     async initializePort(port) {
-      port.registerModule("BookService", async (port) => ({
-        async GetBook(arg: Uint8Array) {
-          const req = GetBookRequest.deserializeBinary(arg)
-
+      registerBookService(port, async () => ({
+        async GetBook(req: GetBookRequest) {
           if (req.getIsbn() == FAIL_WITH_EXCEPTION_ISBN) throw new Error("ErrorMessage")
 
           const book = new Book()
           book.setAuthor("menduz")
           book.setIsbn(req.getIsbn())
           book.setTitle("Rpc onion layers")
-          return book.serializeBinary()
+          return book
         },
-        async *QueryBooks(arg: Uint8Array) {
-          const req = QueryBooksRequest.deserializeBinary(arg)
-
+        async *QueryBooks(req: QueryBooksRequest) {
           if (req.getAuthorPrefix() == "fail_before_yield") throw new Error("fail_before_yield")
 
           const books = [
@@ -57,7 +56,7 @@ describe("codegen client", () => {
               protoBook.setAuthor(book.author)
               protoBook.setIsbn(book.isbn)
               protoBook.setTitle(book.title)
-              yield protoBook.serializeBinary()
+              yield protoBook
             }
           }
 
