@@ -36,6 +36,10 @@ install: install_compiler
 	npm i -S @types/google-protobuf@latest
 
 test:
+	${PROTOC} "--js_out=binary,import_style=commonjs_strict:$(PWD)/test/codegen" \
+		--ts_out="$(PWD)/test/codegen" \
+		-I="$(PWD)/test/codegen" \
+		"$(PWD)/test/codegen/client.proto"
 	node_modules/.bin/jest --detectOpenHandles --colors --runInBand $(TESTARGS) --coverage
 
 test-watch:

@@ -5,3 +5,5 @@ tsdoc-metadata.json
 coverage
 protoc3
 src/protocol/*_pb.*
+test/codegen/*_pb.*
+test/codegen/*_pb.*
