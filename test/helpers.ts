@@ -27,6 +27,9 @@ export function instrumentTransport(memoryTransport: ReturnType<typeof MemoryTra
     return ret[0].toObject()
   }
 
+  // only instrument while running tests
+  if(typeof it == 'function'){
+
   client.on("message", (data) => {
     try {
       log("  (wire server->client): " + JSON.stringify(serialize(data)))
@@ -35,6 +38,7 @@ export function instrumentTransport(memoryTransport: ReturnType<typeof MemoryTra
     }
   })
 
+
   server.on("message", (data) => {
     try {
       log("  (wire client->server): " + JSON.stringify(serialize(data)))
@@ -42,6 +46,7 @@ export function instrumentTransport(memoryTransport: ReturnType<typeof MemoryTra
       console.error(err)
     }
   })
+}
 
   return memoryTransport
 }
@@ -53,13 +58,16 @@ export function createSimpleTestEnvironment(options: CreateRpcServerOptions) {
 
   const rpcServer = createRpcServer(options)
 
-  beforeAll(async () => {
+  async function start() {
     log("> Creating RPC Client")
     setImmediate(() => rpcServer.attachTransport(memoryTransport.server))
     rpcClient = await createRpcClient(memoryTransport.client)
-  })
+  }
+
+  if (typeof beforeAll !== "undefined") beforeAll(start)
 
   return {
+    start,
     get rpcServer() {
       if (!rpcServer) throw new Error("Must se the rpcServer only inside a `it`")
       return rpcServer

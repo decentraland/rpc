@@ -36,8 +36,12 @@
     "dist"
   ],
   "dependencies": {
+    "@types/bytebuffer": "^5.0.43",
     "@types/google-protobuf": "^3.15.5",
+    "bytebuffer": "^5.0.1",
+    "camelcase": "^6.3.0",
     "google-protobuf": "^3.19.1",
-    "mitt": "^3.0.0"
+    "mitt": "^3.0.0",
+    "pascalcase": "^2.0.0"
   }
 }

@@ -59,4 +59,10 @@ build:
 	rm -rf node_modules/@microsoft/api-extractor/node_modules/typescript || true
 	./node_modules/.bin/api-extractor run $(LOCAL_ARG) --typescript-compiler-folder ./node_modules/typescript
 
-.PHONY: build test
+cheap-perf:
+	@time node_modules/.bin/ts-node test/bench.ts
+	@time node_modules/.bin/ts-node test/bench.ts
+	@time node_modules/.bin/ts-node test/bench.ts
+	@time node_modules/.bin/ts-node test/bench.ts
+
+.PHONY: build test cheap-perf

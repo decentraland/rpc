@@ -1,4 +1,4 @@
-import { generateProtoFile } from "./print-proto-dsl"
+import { generateProtoFile, generateTsProtocol } from "./print-proto-dsl"
 import { field, protoDsl } from "./proto-dsl"
 import { writeFileSync } from "fs"
 
@@ -157,3 +157,4 @@ proto.addMessage(
 )
 
 writeFileSync("src/protocol/index.proto", generateProtoFile(proto.validate()))
+writeFileSync("src/protocol/wire-protocol.ts", generateTsProtocol(proto.validate()))
