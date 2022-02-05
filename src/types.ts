@@ -25,7 +25,7 @@ export type TransportEvents = {
 /**
  * @public
  */
-export type Transport = Emitter<TransportEvents> & {
+export type Transport = Pick<Emitter<TransportEvents>, "on" | "emit"> & {
   /** sendMessage is used to send a message through the transport */
   sendMessage(message: Uint8Array): void
   close(): void
@@ -90,12 +90,12 @@ export type RpcPortEvents = {
 /**
  * @public
  */
-export type RpcClientPort = Emitter<RpcPortEvents> & {
+export type RpcClientPort = Pick<Emitter<RpcPortEvents>, "on" | "all"> & {
   readonly portId: number
   readonly portName: string
   loadModule(moduleName: string): Promise<unknown>
   close(): void
-  readonly state: 'open' | 'closed'
+  readonly state: "open" | "closed"
 }
 
 /**
@@ -117,7 +117,7 @@ export type ModuleGeneratorFunction = (port: RpcServerPort) => Promise<ServerMod
 /**
  * @public
  */
-export type RpcServerPort = Emitter<RpcPortEvents> & {
+export type RpcServerPort = Pick<Emitter<RpcPortEvents>, "on" | "emit"> & {
   readonly portId: number
   readonly portName: string
   /**
@@ -154,6 +154,6 @@ export type RpcServerEvents = {
  * The RpcServer also generates the portIds.
  * @public
  */
-export type RpcServer = Emitter<RpcServerEvents> & {
+export type RpcServer = Pick<Emitter<RpcServerEvents>, "on" | "emit"> & {
   attachTransport(transport: Transport): void
 }

@@ -41,12 +41,12 @@ export type RpcClient = {
 };
 
 // @public (undocumented)
-export type RpcClientPort = Emitter<RpcPortEvents> & {
+export type RpcClientPort = Pick<Emitter<RpcPortEvents>, "on" | "all"> & {
     readonly portId: number;
     readonly portName: string;
     loadModule(moduleName: string): Promise<unknown>;
     close(): void;
-    readonly state: 'open' | 'closed';
+    readonly state: "open" | "closed";
 };
 
 // @public (undocumented)
@@ -55,7 +55,7 @@ export type RpcPortEvents = {
 };
 
 // @public
-export type RpcServer = Emitter<RpcServerEvents> & {
+export type RpcServer = Pick<Emitter<RpcServerEvents>, "on" | "emit"> & {
     attachTransport(transport: Transport): void;
 };
 
@@ -77,7 +77,7 @@ export type RpcServerEvents = {
 };
 
 // @public (undocumented)
-export type RpcServerPort = Emitter<RpcPortEvents> & {
+export type RpcServerPort = Pick<Emitter<RpcPortEvents>, "on" | "emit"> & {
     readonly portId: number;
     readonly portName: string;
     registerModule(moduleName: string, moduleDefinition: ModuleGeneratorFunction): void;
@@ -108,7 +108,7 @@ export type ServerModuleProcedure = {
 };
 
 // @public (undocumented)
-export type Transport = Emitter<TransportEvents> & {
+export type Transport = Pick<Emitter<TransportEvents>, "on" | "emit"> & {
     sendMessage(message: Uint8Array): void;
     close(): void;
 };
