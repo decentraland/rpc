@@ -22,9 +22,9 @@ export function instrumentTransport(memoryTransport: ReturnType<typeof MemoryTra
   log("> Creating memory transport")
 
   function serialize(data: Uint8Array) {
-    const t = parseProtocolMessage(new BinaryReader(data))?.toObject()
-    if (!t) debugger
-    return t
+    const ret = parseProtocolMessage(new BinaryReader(data))
+    if (!ret) return null
+    return ret[0].toObject()
   }
 
   client.on("message", (data) => {

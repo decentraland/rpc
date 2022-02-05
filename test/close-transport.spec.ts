@@ -1,4 +1,5 @@
 import { RpcClient } from "../src"
+import { calculateMessageIdentifier } from "../src/protocol/helpers"
 import { RpcMessageHeader, RpcMessageTypes } from "../src/protocol/index_pb"
 import { createSimpleTestEnvironment } from "./helpers"
 
@@ -206,7 +207,7 @@ describe("Unknown packets in the network close the transport", () => {
 
     // sending invalid packages should raise an error
     const badPacket = new RpcMessageHeader()
-    badPacket.setMessageType(RpcMessageTypes.RPCMESSAGETYPES_CREATE_PORT_RESPONSE)
+    badPacket.setMessageIdentifier(calculateMessageIdentifier(RpcMessageTypes.RPCMESSAGETYPES_CREATE_PORT_RESPONSE, 0))
     transportServer.emit("message", badPacket.serializeBinary())
     expect(events).toEqual(["rpc: transportError", "rpc: transportClosed", "transport: close", "transport: error"])
   })

@@ -1,5 +1,4 @@
 import { Message } from "google-protobuf"
-import { RpcClientPort } from "."
 
 export type Constructor<C> = { new (): C; deserializeBinary(data: Uint8Array): C }
 

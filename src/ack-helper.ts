@@ -1,7 +1,7 @@
 import { BinaryReader } from "google-protobuf"
 import { Transport } from "./types"
 import { RpcMessageTypes, StreamMessage } from "./protocol/index_pb"
-import { getMessageType } from "./protocol/helpers"
+import { getMessageIdentifier, parseMessageIdentifier } from "./protocol/helpers"
 
 export type AckDispatcher = {
   transport: Transport
@@ -13,11 +13,11 @@ export function createAckHelper(transport: Transport): AckDispatcher {
 
   transport.on("message", (message) => {
     const reader = new BinaryReader(message)
-    const messageType = getMessageType(reader)
+    const [messageType, messageNumber] = getMessageIdentifier(reader)
     if (messageType == RpcMessageTypes.RPCMESSAGETYPES_STREAM_ACK) {
       reader.reset()
       const data = StreamMessage.deserializeBinaryFromReader(new StreamMessage(), reader)
-      const key = `${data.getMessageId()},${data.getSequenceId()}`
+      const key = `${messageNumber},${data.getSequenceId()}`
       const fut = oneTimeCallbacks.get(key)
       if (fut) {
         fut(data)
@@ -30,7 +30,8 @@ export function createAckHelper(transport: Transport): AckDispatcher {
     transport,
     async sendWithAck(data: StreamMessage): Promise<StreamMessage> {
       return new Promise<StreamMessage>((ret) => {
-        oneTimeCallbacks.set(`${data.getMessageId()},${data.getSequenceId()}`, ret)
+        const [_, messageNumber] = parseMessageIdentifier(data.getMessageIdentifier())
+        oneTimeCallbacks.set(`${messageNumber},${data.getSequenceId()}`, ret)
         transport.sendMessage(data.serializeBinary())
       })
     },

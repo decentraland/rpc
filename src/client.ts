@@ -16,7 +16,13 @@ import {
 import { Message } from "google-protobuf"
 import { MessageDispatcher, messageNumberHandler } from "./message-number-handler"
 import { pushableChannel } from "./push-channel"
-import { closeStreamMessage, parseProtocolMessage, streamAckMessage } from "./protocol/helpers"
+import {
+  calculateMessageIdentifier,
+  closeStreamMessage,
+  parseMessageIdentifier,
+  parseProtocolMessage,
+  streamAckMessage,
+} from "./protocol/helpers"
 
 const EMPTY_U8 = new Uint8Array(0)
 
@@ -37,7 +43,7 @@ export function createPort(portId: number, portName: string, dispatcher: Message
     close() {
       const m = new DestroyPort()
       m.setPortId(portId)
-      m.setMessageType(RpcMessageTypes.RPCMESSAGETYPES_DESTROY_PORT)
+      m.setMessageIdentifier(calculateMessageIdentifier(RpcMessageTypes.RPCMESSAGETYPES_DESTROY_PORT, 0))
       dispatcher.transport.sendMessage(m.serializeBinary())
       events.emit("close", {})
     },
@@ -45,19 +51,21 @@ export function createPort(portId: number, portName: string, dispatcher: Message
       const requestModuleMessage = new RequestModule()
       requestModuleMessage.setModuleName(moduleName)
       requestModuleMessage.setPortId(portId)
-      requestModuleMessage.setMessageType(RpcMessageTypes.RPCMESSAGETYPES_REQUEST_MODULE)
-      const ret = await dispatcher.request(requestModuleMessage)
+      const ret = await dispatcher.request(requestModuleMessage, RpcMessageTypes.RPCMESSAGETYPES_REQUEST_MODULE)
       const parsedMessage = parseProtocolMessage(ret)
-      if (parsedMessage instanceof RequestModuleResponse) {
-        const ret: ClientModuleDefinition = {}
+      if (parsedMessage) {
+        const [message] = parsedMessage
+        if (message instanceof RequestModuleResponse) {
+          const ret: ClientModuleDefinition = {}
 
-        for (let procedure of parsedMessage.getProceduresList()) {
-          ret[procedure.getProcedureName()] = createProcedure(portId, procedure.getProcedureId(), dispatcher)
+          for (let procedure of message.getProceduresList()) {
+            ret[procedure.getProcedureName()] = createProcedure(portId, procedure.getProcedureId(), dispatcher)
+          }
+
+          return ret
+        } else if (message instanceof RemoteError) {
+          throwIfRemoteError(message)
         }
-
-        return ret
-      } else if (parsedMessage instanceof RemoteError) {
-        throwIfRemoteError(parsedMessage)
       }
       throw new Error("Unknown response received from server.")
     },
@@ -73,71 +81,77 @@ function throwIfRemoteError(parsedMessage: Message | null) {
 // @internal
 export function streamFromDispatcher(
   dispatcher: MessageDispatcher,
-  streamMessage: StreamMessage
+  streamMessage: StreamMessage,
+  messageNumber: number
 ): AsyncGenerator<Uint8Array> {
-  const { iterable, push, close, failAndClose, isClosed } = pushableChannel<Uint8Array>(localIteratorClosed)
+  const channel = pushableChannel<Uint8Array>(localIteratorClosed)
 
   let lastReceivedSequenceId = 0
   let isRemoteClosed = false
 
   dispatcher.transport.on("close", () => {
-    if (!isClosed()) {
-      failAndClose(new Error("RPC Transport closed"))
+    if (!channel.isClosed()) {
+      channel.failAndClose(new Error("RPC Transport closed"))
     }
   })
 
   dispatcher.transport.on("error", () => {
-    if (!isClosed()) {
-      failAndClose(new Error("RPC Transport failed"))
+    if (!channel.isClosed()) {
+      channel.failAndClose(new Error("RPC Transport failed"))
     }
   })
 
   function localIteratorClosed() {
     if (!isRemoteClosed) {
       dispatcher.transport.sendMessage(
-        closeStreamMessage(streamMessage.getMessageId(), lastReceivedSequenceId, streamMessage.getPortId())
+        closeStreamMessage(messageNumber, lastReceivedSequenceId, streamMessage.getPortId())
       )
     }
-    dispatcher.removeListener(streamMessage.getMessageId())
+    dispatcher.removeListener(messageNumber)
   }
 
-  function processMessage(message: StreamMessage) {
+  function processMessage(message: StreamMessage, messageNumber: number) {
     lastReceivedSequenceId = message.getSequenceId()
+
     if (message.getClosed()) {
       isRemoteClosed = true
-      close()
+      channel.close()
     } else {
       const payload = message.getPayload_asU8()
-
-      push(payload)
+      const portId = message.getPortId()
+      channel
+        .push(payload)
         .then(() => {
-          const closed = isClosed()
+          const closed = channel.isClosed()
           if (!closed && !isRemoteClosed) {
-            dispatcher.transport.sendMessage(
-              streamAckMessage(message.getMessageId(), lastReceivedSequenceId, message.getPortId())
-            )
+            dispatcher.transport.sendMessage(streamAckMessage(messageNumber, lastReceivedSequenceId, portId))
           }
         })
-        .catch(failAndClose)
+        .catch(channel.failAndClose)
     }
   }
 
-  dispatcher.addListener(streamMessage.getMessageId(), (reader) => {
-    const message = parseProtocolMessage(reader)
+  dispatcher.addListener(messageNumber, (reader) => {
+    const ret = parseProtocolMessage(reader)
 
-    if (message instanceof StreamMessage) {
-      processMessage(message)
-    } else if (message instanceof RemoteError) {
-      isRemoteClosed = true
-      failAndClose(new Error("RemoteError: " + (message.getErrorMessage() || "Unknown remote error")))
+    if (ret) {
+      const [message, messageNumber] = ret
+      if (message instanceof StreamMessage) {
+        processMessage(message, messageNumber)
+      } else if (message instanceof RemoteError) {
+        isRemoteClosed = true
+        channel.failAndClose(new Error("RemoteError: " + (message.getErrorMessage() || "Unknown remote error")))
+      } else {
+        channel.failAndClose(new Error("RemoteError: Protocol error"))
+      }
     } else {
-      failAndClose(new Error("RemoteError: Protocol error"))
+      channel.failAndClose(new Error("RemoteError: Protocol error"))
     }
   })
 
-  processMessage(streamMessage)
+  processMessage(streamMessage, messageNumber)
 
-  return iterable
+  return channel.iterable
 }
 
 // @internal
@@ -145,7 +159,6 @@ function createProcedure(portId: number, procedureId: number, dispatcher: Messag
   const callProcedurePacket = new Request()
   callProcedurePacket.setPortId(portId)
   callProcedurePacket.setProcedureId(procedureId)
-  callProcedurePacket.setMessageType(RpcMessageTypes.RPCMESSAGETYPES_REQUEST)
 
   return async function (data) {
     if (data) {
@@ -153,19 +166,27 @@ function createProcedure(portId: number, procedureId: number, dispatcher: Messag
     } else {
       callProcedurePacket.setPayload(EMPTY_U8)
     }
-    const ret = parseProtocolMessage(await dispatcher.request(callProcedurePacket))
+    const ret = parseProtocolMessage(
+      await dispatcher.request(callProcedurePacket, RpcMessageTypes.RPCMESSAGETYPES_REQUEST)
+    )
 
-    if (ret instanceof Response) {
-      const u8 = ret.getPayload_asU8()
-      if (u8.length) {
-        return u8
+    if (ret) {
+      const [message, messageNumber] = ret
+      if (message instanceof Response) {
+        const u8 = message.getPayload_asU8()
+        if (u8.length) {
+          return u8
+        } else {
+          return undefined
+        }
+      } else if (message instanceof StreamMessage) {
+        return streamFromDispatcher(dispatcher, message, messageNumber)
       } else {
-        return undefined
+        throwIfRemoteError(message)
+        debugger
       }
-    } else if (ret instanceof StreamMessage) {
-      return streamFromDispatcher(dispatcher, ret)
     } else {
-      throwIfRemoteError(ret)
+      throwIfRemoteError(null)
       debugger
     }
   }
@@ -181,16 +202,18 @@ export async function createRpcClient(transport: Transport): Promise<RpcClient> 
 
   async function internalCreatePort(portName: string): Promise<RpcClientPort> {
     const createPortMessage = new CreatePort()
-    createPortMessage.setMessageType(RpcMessageTypes.RPCMESSAGETYPES_CREATE_PORT)
     createPortMessage.setPortName(portName)
-    const ret = await dispatcher.request(createPortMessage)
+    const ret = await dispatcher.request(createPortMessage, RpcMessageTypes.RPCMESSAGETYPES_CREATE_PORT)
     const parsedMessage = parseProtocolMessage(ret)
 
-    throwIfRemoteError(parsedMessage)
+    if (parsedMessage) {
+      const [message] = parsedMessage
+      throwIfRemoteError(message)
 
-    if (parsedMessage instanceof CreatePortResponse) {
-      const portId = parsedMessage.getPortId()
-      return createPort(portId, portName, dispatcher)
+      if (message instanceof CreatePortResponse) {
+        const portId = message.getPortId()
+        return createPort(portId, portName, dispatcher)
+      }
     }
 
     throw new Error("Unknown response received from server.")

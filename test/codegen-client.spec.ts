@@ -1,9 +1,7 @@
-import { Message } from "google-protobuf"
-import { RpcClient, RpcClientPort } from "../src"
+import { RpcClientPort } from "../src"
 import { clientProcedureStream, clientProcedureUnary } from "../src/codegen"
 import { Book, GetBookRequest, QueryBooksRequest } from "./codegen/client_pb"
 import { createSimpleTestEnvironment, takeAsync } from "./helpers"
-import { log } from "./logger"
 
 /// service BookService {
 export type BookService = {
@@ -17,7 +15,7 @@ export type BookService = {
 const FAIL_WITH_EXCEPTION_ISBN = 1
 
 export function loadBookService(port: RpcClientPort): BookService {
-  const mod = port.loadModule('BookService')
+  const mod = port.loadModule("BookService")
   return {
     GetBook: clientProcedureUnary(mod, "GetBook", GetBookRequest, Book),
     QueryBooks: clientProcedureStream(mod, "QueryBooks", QueryBooksRequest, Book),

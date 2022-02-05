@@ -1,4 +1,4 @@
-import { BinaryReader } from "google-protobuf"
+import { BinaryConstants, BinaryReader, Message } from "google-protobuf"
 import {
   CreatePort,
   CreatePortResponse,
@@ -14,8 +14,7 @@ import {
 
 export function closeStreamMessage(messageId: number, sequenceId: number, portId: number): Uint8Array {
   const m = new StreamMessage()
-  m.setMessageType(RpcMessageTypes.RPCMESSAGETYPES_STREAM_MESSAGE)
-  m.setMessageId(messageId)
+  m.setMessageIdentifier(calculateMessageIdentifier(RpcMessageTypes.RPCMESSAGETYPES_STREAM_MESSAGE, messageId))
   m.setSequenceId(sequenceId)
   m.setPortId(portId)
   m.setAck(false)
@@ -23,10 +22,14 @@ export function closeStreamMessage(messageId: number, sequenceId: number, portId
   return m.serializeBinary()
 }
 
-export function streamMessage(messageId: number, sequenceId: number, portId: number, payload: Uint8Array): Uint8Array {
+export function streamMessage(
+  messageNumber: number,
+  sequenceId: number,
+  portId: number,
+  payload: Uint8Array
+): Uint8Array {
   const m = new StreamMessage()
-  m.setMessageType(RpcMessageTypes.RPCMESSAGETYPES_STREAM_MESSAGE)
-  m.setMessageId(messageId)
+  m.setMessageIdentifier(calculateMessageIdentifier(RpcMessageTypes.RPCMESSAGETYPES_STREAM_MESSAGE, messageNumber))
   m.setSequenceId(sequenceId)
   m.setPortId(portId)
   m.setAck(false)
@@ -37,8 +40,7 @@ export function streamMessage(messageId: number, sequenceId: number, portId: num
 
 export function streamAckMessage(messageId: number, sequenceId: number, portId: number): Uint8Array {
   const m = new StreamMessage()
-  m.setMessageType(RpcMessageTypes.RPCMESSAGETYPES_STREAM_ACK)
-  m.setMessageId(messageId)
+  m.setMessageIdentifier(calculateMessageIdentifier(RpcMessageTypes.RPCMESSAGETYPES_STREAM_ACK, messageId))
   m.setSequenceId(sequenceId)
   m.setPortId(portId)
   m.setAck(true)
@@ -46,72 +48,63 @@ export function streamAckMessage(messageId: number, sequenceId: number, portId: 
   return m.serializeBinary()
 }
 
-export function getMessageType(reader: BinaryReader): number | null {
+// @internal
+export function parseMessageIdentifier(value: number): [number, number] {
+  return [(value >> 27) & 0xf, value & 0x07ffffff]
+}
+
+// @internal
+export function calculateMessageIdentifier(messageType: number, messageNumber: number): number {
+  return ((messageType & 0xf) << 27) | (messageNumber & 0x07ffffff)
+}
+
+export function getMessageIdentifier(reader: BinaryReader): [number, number] {
   while (reader.nextField()) {
     if (reader.isEndGroup()) {
-      return null
+      return [0, 0]
     }
-    var field = reader.getFieldNumber()
+    const field = reader.getFieldNumber()
     switch (field) {
-      case 1 /* message_type */:
-        var value = /** @type {number} */ reader.readInt32()
-        return value
+      case 1 /* message_identifier */:
+        if (reader.getWireType() != 5) return [0, 0]
+        const value = /** @type {number} */ reader.readFixed32()
+        return parseMessageIdentifier(value)
       default:
         reader.skipField()
         break
     }
   }
-  return null
+  return [0, 0]
 }
 
-export function getMessageId(reader: BinaryReader): number | null {
-  while (reader.nextField()) {
-    if (reader.isEndGroup()) {
-      return null
-    }
-    var field = reader.getFieldNumber()
-    switch (field) {
-      case 2 /* message_id */:
-        var value = /** @type {number} */ reader.readInt32()
-        return value
-      default:
-        reader.skipField()
-        break
-    }
-  }
-  return null
-}
-
-export function parseProtocolMessage(reader: BinaryReader) {
-  const messageType = getMessageType(reader)
+export function parseProtocolMessage(reader: BinaryReader): [Message, number] | null {
+  const [messageType, messageNumber] = getMessageIdentifier(reader)
   reader.reset()
 
   switch (messageType) {
     case RpcMessageTypes.RPCMESSAGETYPES_CREATE_PORT_RESPONSE:
-      return CreatePortResponse.deserializeBinaryFromReader(new CreatePortResponse(), reader)
+      return [CreatePortResponse.deserializeBinaryFromReader(new CreatePortResponse(), reader), messageNumber]
     case RpcMessageTypes.RPCMESSAGETYPES_RESPONSE:
-      return Response.deserializeBinaryFromReader(new Response(), reader)
+      return [Response.deserializeBinaryFromReader(new Response(), reader), messageNumber]
     case RpcMessageTypes.RPCMESSAGETYPES_REQUEST_MODULE_RESPONSE:
-      return RequestModuleResponse.deserializeBinaryFromReader(new RequestModuleResponse(), reader)
+      return [RequestModuleResponse.deserializeBinaryFromReader(new RequestModuleResponse(), reader), messageNumber]
     case RpcMessageTypes.RPCMESSAGETYPES_STREAM_MESSAGE:
-      return StreamMessage.deserializeBinaryFromReader(new StreamMessage(), reader)
+      return [StreamMessage.deserializeBinaryFromReader(new StreamMessage(), reader), messageNumber]
     case RpcMessageTypes.RPCMESSAGETYPES_SERVER_READY:
       return null
     case RpcMessageTypes.RPCMESSAGETYPES_REMOTE_ERROR_RESPONSE:
-      return RemoteError.deserializeBinaryFromReader(new RemoteError(), reader)
+      return [RemoteError.deserializeBinaryFromReader(new RemoteError(), reader), messageNumber]
     case RpcMessageTypes.RPCMESSAGETYPES_REQUEST:
-      return Request.deserializeBinaryFromReader(new Request(), reader)
+      return [Request.deserializeBinaryFromReader(new Request(), reader), messageNumber]
     case RpcMessageTypes.RPCMESSAGETYPES_CREATE_PORT:
-      return CreatePort.deserializeBinaryFromReader(new CreatePort(), reader)
+      return [CreatePort.deserializeBinaryFromReader(new CreatePort(), reader), messageNumber]
     case RpcMessageTypes.RPCMESSAGETYPES_STREAM_ACK:
-      return StreamMessage.deserializeBinaryFromReader(new StreamMessage(), reader)
+      return [StreamMessage.deserializeBinaryFromReader(new StreamMessage(), reader), messageNumber]
     case RpcMessageTypes.RPCMESSAGETYPES_REQUEST_MODULE:
-      return RequestModule.deserializeBinaryFromReader(new RequestModule(), reader)
+      return [RequestModule.deserializeBinaryFromReader(new RequestModule(), reader), messageNumber]
     case RpcMessageTypes.RPCMESSAGETYPES_DESTROY_PORT:
-      return DestroyPort.deserializeBinaryFromReader(new DestroyPort(), reader)
+      return [DestroyPort.deserializeBinaryFromReader(new DestroyPort(), reader), messageNumber]
   }
-
-  debugger
 
   return null
 }

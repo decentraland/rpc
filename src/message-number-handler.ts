@@ -1,17 +1,17 @@
 import { BinaryReader } from "google-protobuf"
 import { Transport } from "."
-import { getMessageId } from "./protocol/helpers"
+import { calculateMessageIdentifier, getMessageIdentifier } from "./protocol/helpers"
 let globalMessageNumber = 0
 
 export type SendableMessage = {
-  setMessageId(number: number): void
+  setMessageIdentifier(number: number): void
   serializeBinary(): Uint8Array
   toObject(): any
 }
 
 export type MessageDispatcher = {
   transport: Transport
-  request(data: SendableMessage): Promise<BinaryReader>
+  request(data: SendableMessage, messageType: number): Promise<BinaryReader>
   addListener(messageId: number, handler: (reader: BinaryReader) => void): void
   removeListener(messageId: number): void
 }
@@ -24,8 +24,8 @@ export function messageNumberHandler(transport: Transport): MessageDispatcher {
 
   transport.on("message", (message) => {
     const reader = new BinaryReader(message)
-    const messageId = getMessageId(reader)
-    if (messageId !== null) {
+    const [_, messageId] = getMessageIdentifier(reader)
+    if (messageId > 0) {
       const fut = oneTimeCallbacks.get(messageId)
       if (fut) {
         reader.reset()
@@ -34,7 +34,8 @@ export function messageNumberHandler(transport: Transport): MessageDispatcher {
       }
       const handler = listeners.get(messageId)
       if (handler) {
-        handler(new BinaryReader(message))
+        reader.reset()
+        handler(reader)
       }
     }
   })
@@ -49,10 +50,11 @@ export function messageNumberHandler(transport: Transport): MessageDispatcher {
       if (!listeners.has(messageId)) throw new Error("A handler is missing for messageId " + messageId)
       listeners.delete(messageId)
     },
-    async request(data: SendableMessage): Promise<BinaryReader> {
+    async request(data: SendableMessage, messageType: number): Promise<BinaryReader> {
       const messageId = ++globalMessageNumber
+      if (globalMessageNumber > 0x01000000) globalMessageNumber = 0
       return new Promise<BinaryReader>((resolve) => {
-        data.setMessageId(messageId)
+        data.setMessageIdentifier(calculateMessageIdentifier(messageType, messageId))
         oneTimeCallbacks.set(messageId, resolve)
         transport.sendMessage(data.serializeBinary())
       })

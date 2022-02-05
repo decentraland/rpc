@@ -22,10 +22,10 @@ import {
   RpcMessageTypes,
   StreamMessage,
 } from "./protocol/index_pb"
-import { BinaryReader } from "google-protobuf"
+import { BinaryReader, Message } from "google-protobuf"
 import { AsyncProcedureResultServer, RpcPortEvents, ServerModuleDeclaration } from "."
 import { AckDispatcher, createAckHelper } from "./ack-helper"
-import { closeStreamMessage, getMessageType, parseProtocolMessage } from "./protocol/helpers"
+import { calculateMessageIdentifier, closeStreamMessage, parseProtocolMessage } from "./protocol/helpers"
 
 let lastPortId = 0
 
@@ -44,21 +44,18 @@ export type CreateRpcServerOptions = {
 
 function getServerReadyMessage() {
   const transportStartMessage = new RpcMessageHeader()
-  transportStartMessage.setMessageType(RpcMessageTypes.RPCMESSAGETYPES_SERVER_READY)
+  transportStartMessage.setMessageIdentifier(
+    calculateMessageIdentifier(RpcMessageTypes.RPCMESSAGETYPES_SERVER_READY, 0)
+  )
   return transportStartMessage.serializeBinary()
 }
 
 const transportStartMessageSerialized = getServerReadyMessage()
 
 const reusedCreatePortResponse = new CreatePortResponse()
-reusedCreatePortResponse.setMessageType(RpcMessageTypes.RPCMESSAGETYPES_CREATE_PORT_RESPONSE)
 const reusedRequestModuleResponse = new RequestModuleResponse()
-reusedRequestModuleResponse.setMessageType(RpcMessageTypes.RPCMESSAGETYPES_REQUEST_MODULE_RESPONSE)
 const reusedResponse = new Response()
-reusedResponse.setMessageType(RpcMessageTypes.RPCMESSAGETYPES_RESPONSE)
-
 const reusedRemoteError = new RemoteError()
-reusedRemoteError.setMessageType(RpcMessageTypes.RPCMESSAGETYPES_REMOTE_ERROR_RESPONSE)
 
 function moduleProcedures(module: ServerModuleDefinition) {
   return Array.from(Object.entries(module)).filter(([name, value]) => typeof value == "function")
@@ -158,6 +155,7 @@ function getPortFromState(portId: number, transport: Transport, state: RpcServer
 export async function handleCreatePort(
   transport: Transport,
   createPortMessage: CreatePort,
+  messageNumber: number,
   options: CreateRpcServerOptions,
   state: RpcServerState
 ) {
@@ -172,7 +170,9 @@ export async function handleCreatePort(
 
   await options.initializePort(port, transport)
 
-  reusedCreatePortResponse.setMessageId(createPortMessage.getMessageId())
+  reusedCreatePortResponse.setMessageIdentifier(
+    calculateMessageIdentifier(RpcMessageTypes.RPCMESSAGETYPES_CREATE_PORT_RESPONSE, messageNumber)
+  )
   reusedCreatePortResponse.setPortId(port.portId)
   transport.sendMessage(reusedCreatePortResponse.serializeBinary())
 
@@ -180,7 +180,12 @@ export async function handleCreatePort(
 }
 
 // @internal
-export async function handleRequestModule(transport: Transport, requestModule: RequestModule, state: RpcServerState) {
+export async function handleRequestModule(
+  transport: Transport,
+  requestModule: RequestModule,
+  messageNumber: number,
+  state: RpcServerState
+) {
   const port = getPortFromState(requestModule.getPortId(), transport, state)
 
   if (!port) {
@@ -189,7 +194,9 @@ export async function handleRequestModule(transport: Transport, requestModule: R
 
   const loadedModule = await port.loadModule(requestModule.getModuleName())
 
-  reusedRequestModuleResponse.setMessageId(requestModule.getMessageId())
+  reusedRequestModuleResponse.setMessageIdentifier(
+    calculateMessageIdentifier(RpcMessageTypes.RPCMESSAGETYPES_REQUEST_MODULE_RESPONSE, messageNumber)
+  )
   reusedRequestModuleResponse.setPortId(port.portId)
   reusedRequestModuleResponse.setProceduresList([])
   for (const procedure of loadedModule.procedures) {
@@ -202,7 +209,12 @@ export async function handleRequestModule(transport: Transport, requestModule: R
 }
 
 // @internal
-export async function handleDestroyPort(transport: Transport, request: DestroyPort, state: RpcServerState) {
+export async function handleDestroyPort(
+  transport: Transport,
+  request: DestroyPort,
+  _messageNumber: number,
+  state: RpcServerState
+) {
   const port = getPortFromState(request.getPortId(), transport, state)
 
   if (port) {
@@ -211,18 +223,27 @@ export async function handleDestroyPort(transport: Transport, request: DestroyPo
 }
 
 // @internal
-export async function handleRequest(ackDispatcher: AckDispatcher, request: Request, state: RpcServerState) {
+export async function handleRequest(
+  ackDispatcher: AckDispatcher,
+  request: Request,
+  messageNumber: number,
+  state: RpcServerState
+) {
   const port = getPortFromState(request.getPortId(), ackDispatcher.transport, state)
 
   if (!port) {
-    reusedRemoteError.setMessageId(request.getMessageId())
+    reusedRemoteError.setMessageIdentifier(
+      calculateMessageIdentifier(RpcMessageTypes.RPCMESSAGETYPES_REMOTE_ERROR_RESPONSE, messageNumber)
+    )
     reusedRemoteError.setErrorMessage("invalid portId")
     ackDispatcher.transport.sendMessage(reusedRemoteError.serializeBinary())
     return
   }
 
   const result = await port.callProcedure(request.getProcedureId(), request.getPayload_asU8())
-  reusedResponse.setMessageId(request.getMessageId())
+  reusedResponse.setMessageIdentifier(
+    calculateMessageIdentifier(RpcMessageTypes.RPCMESSAGETYPES_RESPONSE, messageNumber)
+  )
   reusedResponse.setPayload("")
 
   if (result instanceof Uint8Array) {
@@ -233,7 +254,6 @@ export async function handleRequest(ackDispatcher: AckDispatcher, request: Reque
     let sequenceNumber = -1
 
     const reusedStreamMessage = new StreamMessage()
-    reusedStreamMessage.setMessageType(RpcMessageTypes.RPCMESSAGETYPES_STREAM_MESSAGE)
 
     const transportClosedRejection = new Promise<StreamMessage>((_, reject) =>
       ackDispatcher.transport.on("close", reject)
@@ -244,7 +264,9 @@ export async function handleRequest(ackDispatcher: AckDispatcher, request: Reque
       reusedStreamMessage.setClosed(false)
       reusedStreamMessage.setAck(false)
       reusedStreamMessage.setSequenceId(sequenceNumber)
-      reusedStreamMessage.setMessageId(request.getMessageId())
+      reusedStreamMessage.setMessageIdentifier(
+        calculateMessageIdentifier(RpcMessageTypes.RPCMESSAGETYPES_STREAM_MESSAGE, messageNumber)
+      )
       reusedStreamMessage.setPayload(elem)
       reusedStreamMessage.setPortId(request.getPortId())
       // we use Promise.race to react to the transport close events
@@ -257,7 +279,7 @@ export async function handleRequest(ackDispatcher: AckDispatcher, request: Reque
         return
       }
     }
-    ackDispatcher.transport.sendMessage(closeStreamMessage(request.getMessageId(), sequenceNumber, request.getPortId()))
+    ackDispatcher.transport.sendMessage(closeStreamMessage(messageNumber, sequenceNumber, request.getPortId()))
   } else {
     ackDispatcher.transport.sendMessage(reusedResponse.serializeBinary())
   }
@@ -298,28 +320,31 @@ export function createRpcServer(options: CreateRpcServerOptions): RpcServer {
     removeTransport(transport)
   }
 
-  function handleWithErrorMessage(
-    promise: Promise<any>,
-    parsedMessage: { getMessageId(): number },
-    transport: Transport
-  ) {
+  function handleWithErrorMessage(promise: Promise<any>, messageNumber: number, transport: Transport) {
     promise.catch((err) => {
-      reusedRemoteError.setMessageId(parsedMessage.getMessageId())
+      reusedRemoteError.setMessageIdentifier(
+        calculateMessageIdentifier(RpcMessageTypes.RPCMESSAGETYPES_REMOTE_ERROR_RESPONSE, messageNumber)
+      )
       reusedRemoteError.setErrorMessage(err.message)
       transport.sendMessage(reusedRemoteError.serializeBinary())
     })
   }
 
-  async function handleMessage(parsedMessage: any, transport: Transport, ackHelper: AckDispatcher) {
+  async function handleMessage(
+    parsedMessage: Message,
+    messageNumber: number,
+    transport: Transport,
+    ackHelper: AckDispatcher
+  ) {
     if (parsedMessage instanceof Request) {
-      await handleRequest(ackHelper, parsedMessage, state)
+      await handleRequest(ackHelper, parsedMessage, messageNumber, state)
     } else if (parsedMessage instanceof RequestModule) {
-      await handleRequestModule(transport, parsedMessage, state)
+      await handleRequestModule(transport, parsedMessage, messageNumber, state)
     } else if (parsedMessage instanceof CreatePort) {
-      const port = await handleCreatePort(transport, parsedMessage, options, state)
+      const port = await handleCreatePort(transport, parsedMessage, messageNumber, options, state)
       port.on("close", () => events.emit("portClosed", { port }))
     } else if (parsedMessage instanceof DestroyPort) {
-      await handleDestroyPort(transport, parsedMessage, state)
+      await handleDestroyPort(transport, parsedMessage, messageNumber, state)
     } else if (parsedMessage instanceof StreamMessage) {
       // noop
     } else {
@@ -336,7 +361,12 @@ export function createRpcServer(options: CreateRpcServerOptions): RpcServer {
         const reader = new BinaryReader(message)
         const parsedMessage = parseProtocolMessage(reader)
         if (parsedMessage) {
-          handleWithErrorMessage(handleMessage(parsedMessage, newTransport, ackHelper), parsedMessage, newTransport)
+          const [message, messageNumber] = parsedMessage
+          handleWithErrorMessage(
+            handleMessage(message, messageNumber, newTransport, ackHelper),
+            messageNumber,
+            newTransport
+          )
         }
       })
 

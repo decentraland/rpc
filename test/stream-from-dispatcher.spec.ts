@@ -8,25 +8,26 @@ import { instrumentTransport, takeAsync } from "./helpers"
 describe("streamFromDispatcher", () => {
   it("a CloseMessage from the server closes the iterator in the client", async () => {
     let seq = 0
-    const MESSAGE_ID = 1
+    const MESSAGE_NUMBER = 1
     const transport = instrumentTransport(MemoryTransport())
     const dispatcher = messageNumberHandler(transport.client)
     const removeListenerSpy = jest.spyOn(dispatcher, "removeListener")
     const stream = streamFromDispatcher(
       dispatcher,
-      StreamMessage.deserializeBinary(streamMessage(MESSAGE_ID, seq++, 0, new Uint8Array()))
+      StreamMessage.deserializeBinary(streamMessage(MESSAGE_NUMBER, seq++, 0, new Uint8Array())),
+      MESSAGE_NUMBER
     )
 
-    setTimeout(() => transport.server.sendMessage(closeStreamMessage(MESSAGE_ID, seq++, 0)), 10)
+    setTimeout(() => transport.server.sendMessage(closeStreamMessage(MESSAGE_NUMBER, seq++, 0)), 10)
 
     const allMessages = await takeAsync(stream)
     expect(allMessages).toEqual([new Uint8Array()])
-    expect(removeListenerSpy).toHaveBeenCalledWith(MESSAGE_ID)
+    expect(removeListenerSpy).toHaveBeenCalledWith(MESSAGE_NUMBER)
   })
 
   it("a CloseMessage from the server closes the iterator in the client after yielding data SYNC", async () => {
     let seq = 0
-    const MESSAGE_ID = 2
+    const MESSAGE_NUMBER = 2
     const PAYLOAD = Uint8Array.from([0xde, 0xad])
     const transport = instrumentTransport(MemoryTransport())
     const dispatcher = messageNumberHandler(transport.client)
@@ -34,14 +35,15 @@ describe("streamFromDispatcher", () => {
     const addListenerSpy = jest.spyOn(dispatcher, "addListener")
     const stream = streamFromDispatcher(
       dispatcher,
-      StreamMessage.deserializeBinary(streamMessage(MESSAGE_ID, seq++, 0, new Uint8Array()))
+      StreamMessage.deserializeBinary(streamMessage(MESSAGE_NUMBER, seq++, 0, new Uint8Array())),
+      MESSAGE_NUMBER
     )
 
-    expect(addListenerSpy).toHaveBeenCalledWith(MESSAGE_ID, expect.anything())
+    expect(addListenerSpy).toHaveBeenCalledWith(MESSAGE_NUMBER, expect.anything())
 
-    transport.server.sendMessage(streamMessage(MESSAGE_ID, seq++, 0, PAYLOAD))
-    transport.server.sendMessage(closeStreamMessage(MESSAGE_ID, seq++, 0))
-    expect(removeListenerSpy).toHaveBeenCalledWith(MESSAGE_ID)
+    transport.server.sendMessage(streamMessage(MESSAGE_NUMBER, seq++, 0, PAYLOAD))
+    transport.server.sendMessage(closeStreamMessage(MESSAGE_NUMBER, seq++, 0))
+    expect(removeListenerSpy).toHaveBeenCalledWith(MESSAGE_NUMBER)
 
     const allMessages = await takeAsync(stream)
     expect(allMessages).toEqual([new Uint8Array(), PAYLOAD])
@@ -49,18 +51,19 @@ describe("streamFromDispatcher", () => {
 
   it("a CloseMessage from the server closes the iterator in the client after yielding data", async () => {
     let seq = 0
-    const MESSAGE_ID = 2
+    const MESSAGE_NUMBER = 2
     const PAYLOAD = Uint8Array.from([0xde, 0xad])
     const transport = instrumentTransport(MemoryTransport())
     const dispatcher = messageNumberHandler(transport.client)
     const stream = streamFromDispatcher(
       dispatcher,
-      StreamMessage.deserializeBinary(streamMessage(MESSAGE_ID, seq++, 0, new Uint8Array()))
+      StreamMessage.deserializeBinary(streamMessage(MESSAGE_NUMBER, seq++, 0, new Uint8Array())),
+      MESSAGE_NUMBER
     )
 
     setTimeout(() => {
-      transport.server.sendMessage(streamMessage(MESSAGE_ID, seq++, 0, PAYLOAD))
-      transport.server.sendMessage(closeStreamMessage(MESSAGE_ID, seq++, 0))
+      transport.server.sendMessage(streamMessage(MESSAGE_NUMBER, seq++, 0, PAYLOAD))
+      transport.server.sendMessage(closeStreamMessage(MESSAGE_NUMBER, seq++, 0))
     }, 10)
 
     const allMessages = await takeAsync(stream)
@@ -68,17 +71,18 @@ describe("streamFromDispatcher", () => {
   })
 
   it("a StreamMessage with payload yields its result concurrently", async () => {
-    const MESSAGE_ID = 3
+    const MESSAGE_NUMBER = 3
     const PAYLOAD = Uint8Array.from([132])
     const transport = instrumentTransport(MemoryTransport())
     const dispatcher = messageNumberHandler(transport.client)
     const stream = streamFromDispatcher(
       dispatcher,
-      StreamMessage.deserializeBinary(streamMessage(MESSAGE_ID, 0, 0, PAYLOAD))
+      StreamMessage.deserializeBinary(streamMessage(MESSAGE_NUMBER, 0, 0, PAYLOAD)),
+      MESSAGE_NUMBER
     )
 
     const [_, allMessages] = await Promise.all([
-      transport.server.sendMessage(closeStreamMessage(MESSAGE_ID, 0, 0)),
+      transport.server.sendMessage(closeStreamMessage(MESSAGE_NUMBER, 0, 0)),
       takeAsync(stream),
     ])
 
@@ -87,16 +91,17 @@ describe("streamFromDispatcher", () => {
 
   it("a StreamMessage with payload yields its result", async () => {
     let seq = 0
-    const MESSAGE_ID = 3
+    const MESSAGE_NUMBER = 3
     const PAYLOAD = Uint8Array.from([133])
     const transport = instrumentTransport(MemoryTransport())
     const dispatcher = messageNumberHandler(transport.client)
     const stream = streamFromDispatcher(
       dispatcher,
-      StreamMessage.deserializeBinary(streamMessage(MESSAGE_ID, seq++, 0, PAYLOAD))
+      StreamMessage.deserializeBinary(streamMessage(MESSAGE_NUMBER, seq++, 0, PAYLOAD)),
+      MESSAGE_NUMBER
     )
 
-    setTimeout(() => transport.server.sendMessage(closeStreamMessage(MESSAGE_ID, seq++, 0)), 10)
+    setTimeout(() => transport.server.sendMessage(closeStreamMessage(MESSAGE_NUMBER, seq++, 0)), 10)
 
     const allMessages = await takeAsync(stream)
     expect(allMessages).toEqual([PAYLOAD])
@@ -104,33 +109,35 @@ describe("streamFromDispatcher", () => {
 
   it("a StreamMessage with payload yields its result with closeMessage received before consuming stream", async () => {
     let seq = 0
-    const MESSAGE_ID = 3
+    const MESSAGE_NUMBER = 3
     const PAYLOAD = Uint8Array.from([133])
     const transport = instrumentTransport(MemoryTransport())
     const dispatcher = messageNumberHandler(transport.client)
     const stream = streamFromDispatcher(
       dispatcher,
-      StreamMessage.deserializeBinary(streamMessage(MESSAGE_ID, seq++, 0, PAYLOAD))
+      StreamMessage.deserializeBinary(streamMessage(MESSAGE_NUMBER, seq++, 0, PAYLOAD)),
+      MESSAGE_NUMBER
     )
-    transport.server.sendMessage(closeStreamMessage(MESSAGE_ID, seq++, 0))
+    transport.server.sendMessage(closeStreamMessage(MESSAGE_NUMBER, seq++, 0))
     const allMessages = await takeAsync(stream)
     expect(allMessages).toEqual([PAYLOAD])
   })
 
   it("Consume complete stream", async () => {
     let seq = 0
-    const MESSAGE_ID = 4
+    const MESSAGE_NUMBER = 4
     const transport = instrumentTransport(MemoryTransport())
     const dispatcher = messageNumberHandler(transport.client)
     const stream = streamFromDispatcher(
       dispatcher,
-      StreamMessage.deserializeBinary(streamMessage(MESSAGE_ID, seq++, 0, Uint8Array.from([1])))
+      StreamMessage.deserializeBinary(streamMessage(MESSAGE_NUMBER, seq++, 0, Uint8Array.from([1]))),
+      MESSAGE_NUMBER
     )
 
-    transport.server.sendMessage(streamMessage(MESSAGE_ID, seq++, 0, Uint8Array.from([2])))
-    transport.server.sendMessage(streamMessage(MESSAGE_ID, seq++, 0, Uint8Array.from([3])))
-    transport.server.sendMessage(streamMessage(MESSAGE_ID, seq++, 0, Uint8Array.from([4])))
-    transport.server.sendMessage(closeStreamMessage(MESSAGE_ID, seq++, 0))
+    transport.server.sendMessage(streamMessage(MESSAGE_NUMBER, seq++, 0, Uint8Array.from([2])))
+    transport.server.sendMessage(streamMessage(MESSAGE_NUMBER, seq++, 0, Uint8Array.from([3])))
+    transport.server.sendMessage(streamMessage(MESSAGE_NUMBER, seq++, 0, Uint8Array.from([4])))
+    transport.server.sendMessage(closeStreamMessage(MESSAGE_NUMBER, seq++, 0))
 
     const values = await takeAsync(stream)
 
@@ -139,24 +146,25 @@ describe("streamFromDispatcher", () => {
 
   it("Consume partial stream", async () => {
     let seq = 0
-    const MESSAGE_ID = 4
+    const MESSAGE_NUMBER = 4
     const transport = instrumentTransport(MemoryTransport())
     const dispatcher = messageNumberHandler(transport.client)
     const removeListenerSpy = jest.spyOn(dispatcher, "removeListener")
     const stream = streamFromDispatcher(
       dispatcher,
-      StreamMessage.deserializeBinary(streamMessage(MESSAGE_ID, seq++, 0, Uint8Array.from([1])))
+      StreamMessage.deserializeBinary(streamMessage(MESSAGE_NUMBER, seq++, 0, Uint8Array.from([1]))),
+      MESSAGE_NUMBER
     )
 
-    transport.server.sendMessage(streamMessage(MESSAGE_ID, seq++, 0, Uint8Array.from([2])))
-    transport.server.sendMessage(streamMessage(MESSAGE_ID, seq++, 0, Uint8Array.from([3])))
-    transport.server.sendMessage(streamMessage(MESSAGE_ID, seq++, 0, Uint8Array.from([4])))
+    transport.server.sendMessage(streamMessage(MESSAGE_NUMBER, seq++, 0, Uint8Array.from([2])))
+    transport.server.sendMessage(streamMessage(MESSAGE_NUMBER, seq++, 0, Uint8Array.from([3])))
+    transport.server.sendMessage(streamMessage(MESSAGE_NUMBER, seq++, 0, Uint8Array.from([4])))
 
-    expect(removeListenerSpy).not.toHaveBeenCalledWith(MESSAGE_ID)
+    expect(removeListenerSpy).not.toHaveBeenCalledWith(MESSAGE_NUMBER)
     const values = await takeAsync(stream, 2)
     expect(values).toEqual([Uint8Array.from([1]), Uint8Array.from([2])])
     // the listener should have ended because we finished the stream at two
-    expect(removeListenerSpy).toHaveBeenCalledWith(MESSAGE_ID)
+    expect(removeListenerSpy).toHaveBeenCalledWith(MESSAGE_NUMBER)
 
     // rest of the stream can be consumed beacuse we have it in memory
     const rest = await takeAsync(stream, 2)
@@ -165,18 +173,19 @@ describe("streamFromDispatcher", () => {
 
   it("closes the stream if the transport has an error", async () => {
     let seq = 0
-    const MESSAGE_ID = 4
+    const MESSAGE_NUMBER = 4
     const transport = instrumentTransport(MemoryTransport())
     const dispatcher = messageNumberHandler(transport.client)
     const removeListenerSpy = jest.spyOn(dispatcher, "removeListener")
     const stream = streamFromDispatcher(
       dispatcher,
-      StreamMessage.deserializeBinary(streamMessage(MESSAGE_ID, seq++, 0, Uint8Array.from([1])))
+      StreamMessage.deserializeBinary(streamMessage(MESSAGE_NUMBER, seq++, 0, Uint8Array.from([1]))),
+      MESSAGE_NUMBER
     )
 
-    expect(removeListenerSpy).not.toHaveBeenCalledWith(MESSAGE_ID)
+    expect(removeListenerSpy).not.toHaveBeenCalledWith(MESSAGE_NUMBER)
     transport.client.emit("error", new Error("TRANSPORT ERROR"))
-    expect(removeListenerSpy).toHaveBeenCalledWith(MESSAGE_ID)
+    expect(removeListenerSpy).toHaveBeenCalledWith(MESSAGE_NUMBER)
 
     // the listener should have ended because we finished the stream due to an error
     let received: Uint8Array[] = []
