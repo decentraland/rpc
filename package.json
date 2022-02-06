@@ -41,6 +41,7 @@
     "camelcase": "^6.3.0",
     "google-protobuf": "^3.19.1",
     "mitt": "^3.0.0",
-    "pascalcase": "^2.0.0"
+    "pascalcase": "^2.0.0",
+    "protobufjs": "^6.11.2"
   }
 }

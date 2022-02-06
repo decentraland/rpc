@@ -1,8 +1,7 @@
 import { Transport } from "."
-import { createDecoder, Decoder } from "./encdec/decoding"
-import { Encoder, toUint8Array } from "./encdec/encoding"
+import { Writer,Reader } from "protobufjs"
 import { parseMessageIdentifier } from "./protocol/helpers"
-import { readRpcMessageHeader } from "./protocol/wire-protocol"
+import { RpcMessageHeader } from "./protocol/pbjs"
 let globalMessageNumber = 0
 
 export type SendableMessage = {
@@ -11,20 +10,20 @@ export type SendableMessage = {
 
 export type MessageDispatcher = {
   transport: Transport
-  request(cb: (bb: Encoder, messageNumber: number) => void): Promise<Decoder>
-  addListener(messageId: number, handler: (reader: Decoder) => void): void
+  request(cb: (bb: Writer, messageNumber: number) => void): Promise<Reader>
+  addListener(messageId: number, handler: (reader: Reader) => void): void
   removeListener(messageId: number): void
 }
 
 export function messageNumberHandler(transport: Transport): MessageDispatcher {
   // message_number -> future
-  type ReaderCallback = (reader: Decoder) => void
+  type ReaderCallback = (reader: Reader) => void
   const oneTimeCallbacks = new Map<number, ReaderCallback>()
-  const listeners = new Map<number, (reader: Decoder) => void>()
+  const listeners = new Map<number, (reader: Reader) => void>()
 
   transport.on("message", (message) => {
-    const reader = createDecoder(message)
-    const header = readRpcMessageHeader(reader)
+    const reader = Reader.create(message)
+    const header = RpcMessageHeader.decode(reader)
     const [_, messageNumber] = parseMessageIdentifier(header.messageIdentifier)
 
     if (messageNumber > 0) {
@@ -52,14 +51,14 @@ export function messageNumberHandler(transport: Transport): MessageDispatcher {
       if (!listeners.has(messageId)) throw new Error("A handler is missing for messageId " + messageId)
       listeners.delete(messageId)
     },
-    async request(cb: (bb: Encoder, messageNumber: number) => void): Promise<Decoder> {
+    async request(cb: (bb: Writer, messageNumber: number) => void): Promise<Reader> {
       const messageNumber = ++globalMessageNumber
       if (globalMessageNumber > 0x01000000) globalMessageNumber = 0
-      return new Promise<Decoder>((resolve) => {
+      return new Promise<Reader>((resolve) => {
         oneTimeCallbacks.set(messageNumber, resolve)
-        const bb = new Encoder()
+        const bb = new Writer()
         cb(bb, messageNumber)
-        transport.sendMessage(toUint8Array(bb))
+        transport.sendMessage(bb.finish())
       })
     },
   }

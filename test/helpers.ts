@@ -3,7 +3,7 @@ import { log } from "./logger"
 import { inspect } from "util"
 import { MemoryTransport } from "../src/transports/Memory"
 import { parseProtocolMessage } from "../src/protocol/helpers"
-import { createDecoder } from "../src/encdec/decoding"
+import { Reader } from "protobufjs"
 
 // async Array.from(generator*) with support for max elements
 export async function takeAsync<T>(iter: AsyncGenerator<T>, max?: number) {
@@ -23,7 +23,7 @@ export function instrumentTransport(memoryTransport: ReturnType<typeof MemoryTra
   log("> Creating memory transport")
 
   function serialize(data: Uint8Array) {
-    const ret = parseProtocolMessage(createDecoder(data))
+    const ret = parseProtocolMessage(Reader.create(data))
     if (!ret) return inspect(data)
     return ret[1]
   }
@@ -50,6 +50,7 @@ export function instrumentTransport(memoryTransport: ReturnType<typeof MemoryTra
     server.on("error", (data) => {
       log("  (server error): " + data)
     })
+
     server.on("message", (data) => {
       try {
         log("  (wire client->server): " + JSON.stringify(serialize(data)))
@@ -74,6 +75,10 @@ export function createSimpleTestEnvironment(options: CreateRpcServerOptions) {
     let serverClosed = false
     memoryTransport.client.on("close", () => (clientClosed = true))
     memoryTransport.server.on("close", () => (serverClosed = true))
+
+    rpcServer.on("transportError", (data) => {
+      log("  (server transportError): " + inspect(data))
+    })
 
     if (serverClosed) throw new Error("This server is already closed. Use a new testing environment")
     log("> Creating RPC Client")

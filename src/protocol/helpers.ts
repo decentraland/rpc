@@ -1,31 +1,32 @@
-import { Decoder } from "../encdec/decoding"
-import { createEncoder, toUint8Array } from "../encdec/encoding"
+import { Writer, Reader } from "protobufjs"
 import {
   RpcMessageTypes,
-  readRpcMessageHeader,
-  readCreatePortResponse,
-  readResponse,
-  readRequestModuleResponse,
-  readStreamMessage,
-  readRemoteError,
-  readRequest,
-  readCreatePort,
-  readRequestModule,
-  readDestroyPort,
-  writeStreamMessage,
-} from "./wire-protocol"
+  RpcMessageHeader,
+  CreatePortResponse,
+  Response,
+  RequestModuleResponse,
+  StreamMessage,
+  RemoteError,
+  Request,
+  CreatePort,
+  RequestModule,
+  DestroyPort,
+} from "./pbjs"
 
 export function closeStreamMessage(messageNumber: number, sequenceId: number, portId: number): Uint8Array {
-  const bb = createEncoder()
-  writeStreamMessage(bb, {
-    messageIdentifier: calculateMessageIdentifier(RpcMessageTypes.STREAM_MESSAGE, messageNumber),
-    sequenceId,
-    portId,
-    ack: false,
-    closed: true,
-    payload: Uint8Array.of(),
-  })
-  return toUint8Array(bb)
+  const bb = new Writer()
+  StreamMessage.encode(
+    {
+      messageIdentifier: calculateMessageIdentifier(RpcMessageTypes.RpcMessageTypes_STREAM_MESSAGE, messageNumber),
+      sequenceId,
+      portId,
+      ack: false,
+      closed: true,
+      payload: Uint8Array.of(),
+    },
+    bb
+  )
+  return bb.finish()
 }
 
 export function streamMessage(
@@ -34,29 +35,35 @@ export function streamMessage(
   portId: number,
   payload: Uint8Array
 ): Uint8Array {
-  const bb = createEncoder()
-  writeStreamMessage(bb, {
-    messageIdentifier: calculateMessageIdentifier(RpcMessageTypes.STREAM_MESSAGE, messageNumber),
-    sequenceId,
-    portId,
-    ack: false,
-    closed: false,
-    payload,
-  })
-  return toUint8Array(bb)
+  const bb = new Writer()
+  StreamMessage.encode(
+    {
+      messageIdentifier: calculateMessageIdentifier(RpcMessageTypes.RpcMessageTypes_STREAM_MESSAGE, messageNumber),
+      sequenceId,
+      portId,
+      ack: false,
+      closed: false,
+      payload,
+    },
+    bb
+  )
+  return bb.finish()
 }
 
 export function streamAckMessage(messageNumber: number, sequenceId: number, portId: number): Uint8Array {
-  const bb = createEncoder()
-  writeStreamMessage(bb, {
-    messageIdentifier: calculateMessageIdentifier(RpcMessageTypes.STREAM_ACK, messageNumber),
-    sequenceId,
-    portId,
-    ack: true,
-    closed: false,
-    payload: Uint8Array.of(),
-  })
-  return toUint8Array(bb)
+  const bb = new Writer()
+  StreamMessage.encode(
+    {
+      messageIdentifier: calculateMessageIdentifier(RpcMessageTypes.RpcMessageTypes_STREAM_ACK, messageNumber),
+      sequenceId,
+      portId,
+      ack: true,
+      closed: false,
+      payload: Uint8Array.of(),
+    },
+    bb
+  )
+  return bb.finish()
 }
 
 // @internal
@@ -69,34 +76,34 @@ export function calculateMessageIdentifier(messageType: number, messageNumber: n
   return ((messageType & 0xf) << 27) | (messageNumber & 0x07ffffff)
 }
 
-export function parseProtocolMessage(reader: Decoder): [number, any, number] | null {
+export function parseProtocolMessage(reader: Reader): [number, any, number] | null {
   const originalPos = reader.pos
-  const [messageType, messageNumber] = parseMessageIdentifier(readRpcMessageHeader(reader).messageIdentifier)
+  const [messageType, messageNumber] = parseMessageIdentifier(RpcMessageHeader.decode(reader).messageIdentifier)
   reader.pos = originalPos
 
   switch (messageType) {
-    case RpcMessageTypes.CREATE_PORT_RESPONSE:
-      return [messageType, readCreatePortResponse(reader), messageNumber]
-    case RpcMessageTypes.RESPONSE:
-      return [messageType, readResponse(reader), messageNumber]
-    case RpcMessageTypes.REQUEST_MODULE_RESPONSE:
-      return [messageType, readRequestModuleResponse(reader), messageNumber]
-    case RpcMessageTypes.STREAM_MESSAGE:
-      return [messageType, readStreamMessage(reader), messageNumber]
-    case RpcMessageTypes.SERVER_READY:
+    case RpcMessageTypes.RpcMessageTypes_CREATE_PORT_RESPONSE:
+      return [messageType, CreatePortResponse.decode(reader), messageNumber]
+    case RpcMessageTypes.RpcMessageTypes_RESPONSE:
+      return [messageType, Response.decode(reader), messageNumber]
+    case RpcMessageTypes.RpcMessageTypes_REQUEST_MODULE_RESPONSE:
+      return [messageType, RequestModuleResponse.decode(reader), messageNumber]
+    case RpcMessageTypes.RpcMessageTypes_STREAM_MESSAGE:
+      return [messageType, StreamMessage.decode(reader), messageNumber]
+    case RpcMessageTypes.RpcMessageTypes_SERVER_READY:
       return null
-    case RpcMessageTypes.REMOTE_ERROR_RESPONSE:
-      return [messageType, readRemoteError(reader), messageNumber]
-    case RpcMessageTypes.REQUEST:
-      return [messageType, readRequest(reader), messageNumber]
-    case RpcMessageTypes.CREATE_PORT:
-      return [messageType, readCreatePort(reader), messageNumber]
-    case RpcMessageTypes.STREAM_ACK:
-      return [messageType, readStreamMessage(reader), messageNumber]
-    case RpcMessageTypes.REQUEST_MODULE:
-      return [messageType, readRequestModule(reader), messageNumber]
-    case RpcMessageTypes.DESTROY_PORT:
-      return [messageType, readDestroyPort(reader), messageNumber]
+    case RpcMessageTypes.RpcMessageTypes_REMOTE_ERROR_RESPONSE:
+      return [messageType, RemoteError.decode(reader), messageNumber]
+    case RpcMessageTypes.RpcMessageTypes_REQUEST:
+      return [messageType, Request.decode(reader), messageNumber]
+    case RpcMessageTypes.RpcMessageTypes_CREATE_PORT:
+      return [messageType, CreatePort.decode(reader), messageNumber]
+    case RpcMessageTypes.RpcMessageTypes_STREAM_ACK:
+      return [messageType, StreamMessage.decode(reader), messageNumber]
+    case RpcMessageTypes.RpcMessageTypes_REQUEST_MODULE:
+      return [messageType, RequestModule.decode(reader), messageNumber]
+    case RpcMessageTypes.RpcMessageTypes_DESTROY_PORT:
+      return [messageType, DestroyPort.decode(reader), messageNumber]
   }
 
   return null

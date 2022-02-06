@@ -157,4 +157,4 @@ proto.addMessage(
 )
 
 writeFileSync("src/protocol/index.proto", generateProtoFile(proto.validate()))
-writeFileSync("src/protocol/wire-protocol.ts", generateTsProtocol(proto.validate()))
+// writeFileSync("src/protocol/wire-protocol.ts", generateTsProtocol(proto.validate()))

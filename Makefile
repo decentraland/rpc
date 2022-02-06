@@ -47,6 +47,8 @@ test-watch:
 
 build:
 	node_modules/.bin/ts-node scripts/generate-proto-file.ts
+	node_modules/.bin/pbjs -t static-module -w commonjs -o src/protocol/pbjs.js src/protocol/index.proto
+	node_modules/.bin/pbts -o src/protocol/pbjs.d.ts src/protocol/pbjs.js
 	@rm -rf dist || true
 	@mkdir -p dist
 	${PROTOC} "--js_out=binary,import_style=commonjs_strict:$(PWD)/src/protocol" \

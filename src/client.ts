@@ -1,19 +1,19 @@
 import { CallableProcedureClient, ClientModuleDefinition, RpcClient, RpcClientPort, RpcPortEvents } from "."
 import { Transport } from "./types"
 import mitt from "mitt"
+import { Writer } from "protobufjs"
 import {
+  CreatePort,
   CreatePortResponse,
+  DestroyPort,
   RemoteError,
   Request,
+  RequestModule,
   RequestModuleResponse,
   Response,
   RpcMessageTypes,
   StreamMessage,
-  writeCreatePort,
-  writeDestroyPort,
-  writeRequest,
-  writeRequestModule,
-} from "./protocol/wire-protocol"
+} from "./protocol/pbjs"
 import { MessageDispatcher, messageNumberHandler } from "./message-number-handler"
 import { pushableChannel } from "./push-channel"
 import {
@@ -22,8 +22,6 @@ import {
   parseProtocolMessage,
   streamAckMessage,
 } from "./protocol/helpers"
-import { BinaryWriter } from "google-protobuf"
-import { createEncoder, toUint8Array } from "./encdec/encoding"
 
 const EMPTY_U8 = new Uint8Array(0)
 
@@ -42,27 +40,35 @@ export function createPort(portId: number, portName: string, dispatcher: Message
       return state
     },
     close() {
-      const bb = createEncoder()
-      writeDestroyPort(bb, {
-        messageIdentifier: calculateMessageIdentifier(RpcMessageTypes.DESTROY_PORT, 0),
-        portId,
-      })
-
-      dispatcher.transport.sendMessage(toUint8Array(bb))
+      const bb = new Writer()
+      DestroyPort.encode(
+        {
+          messageIdentifier: calculateMessageIdentifier(RpcMessageTypes.RpcMessageTypes_DESTROY_PORT, 0),
+          portId,
+        },
+        bb
+      )
+      dispatcher.transport.sendMessage(bb.finish())
       events.emit("close", {})
     },
     async loadModule(moduleName: string) {
       const ret = await dispatcher.request((bb, messageNumber) => {
-        writeRequestModule(bb, {
-          messageIdentifier: calculateMessageIdentifier(RpcMessageTypes.REQUEST_MODULE, messageNumber),
-          moduleName,
-          portId,
-        })
+        RequestModule.encode(
+          {
+            messageIdentifier: calculateMessageIdentifier(
+              RpcMessageTypes.RpcMessageTypes_REQUEST_MODULE,
+              messageNumber
+            ),
+            moduleName,
+            portId,
+          },
+          bb
+        )
       })
       const parsedMessage = parseProtocolMessage(ret)
       if (parsedMessage) {
         const [messageType, message] = parsedMessage
-        if (messageType == RpcMessageTypes.REQUEST_MODULE_RESPONSE) {
+        if (messageType == RpcMessageTypes.RpcMessageTypes_REQUEST_MODULE_RESPONSE) {
           const ret: ClientModuleDefinition = {}
 
           for (let procedure of (message as RequestModuleResponse).procedures) {
@@ -70,7 +76,7 @@ export function createPort(portId: number, portName: string, dispatcher: Message
           }
 
           return ret
-        } else if (messageType == RpcMessageTypes.REMOTE_ERROR_RESPONSE) {
+        } else if (messageType == RpcMessageTypes.RpcMessageTypes_REMOTE_ERROR_RESPONSE) {
           throwIfRemoteError(message)
         }
       }
@@ -139,9 +145,9 @@ export function streamFromDispatcher(
 
     if (ret) {
       const [messageType, message, messageNumber] = ret
-      if (messageType == RpcMessageTypes.STREAM_MESSAGE) {
+      if (messageType == RpcMessageTypes.RpcMessageTypes_STREAM_MESSAGE) {
         processMessage(message, messageNumber)
-      } else if (messageType == RpcMessageTypes.REMOTE_ERROR_RESPONSE) {
+      } else if (messageType == RpcMessageTypes.RpcMessageTypes_REMOTE_ERROR_RESPONSE) {
         isRemoteClosed = true
         channel.failAndClose(
           new Error("RemoteError: " + ((message as RemoteError).errorMessage || "Unknown remote error"))
@@ -161,7 +167,7 @@ export function streamFromDispatcher(
 
 // @internal
 function createProcedure(portId: number, procedureId: number, dispatcher: MessageDispatcher): CallableProcedureClient {
-  const callProcedurePacket: Request = {
+  const callProcedurePacket = {
     portId,
     messageIdentifier: 0,
     payload: EMPTY_U8,
@@ -176,23 +182,26 @@ function createProcedure(portId: number, procedureId: number, dispatcher: Messag
     }
     const ret = parseProtocolMessage(
       await dispatcher.request((bb, messageNumber) => {
-        callProcedurePacket.messageIdentifier = calculateMessageIdentifier(RpcMessageTypes.REQUEST, messageNumber)
-        writeRequest(bb, callProcedurePacket)
+        callProcedurePacket.messageIdentifier = calculateMessageIdentifier(
+          RpcMessageTypes.RpcMessageTypes_REQUEST,
+          messageNumber
+        )
+        Request.encode(callProcedurePacket, bb)
       })
     )
 
     if (ret) {
       const [messageType, message, messageNumber] = ret
-      if (messageType == RpcMessageTypes.RESPONSE) {
+      if (messageType == RpcMessageTypes.RpcMessageTypes_RESPONSE) {
         const u8 = (message as Response).payload
         if (u8.length) {
           return u8
         } else {
           return undefined
         }
-      } else if (messageType == RpcMessageTypes.STREAM_MESSAGE) {
+      } else if (messageType == RpcMessageTypes.RpcMessageTypes_STREAM_MESSAGE) {
         return streamFromDispatcher(dispatcher, message, messageNumber)
-      } else if (messageType == RpcMessageTypes.REMOTE_ERROR_RESPONSE) {
+      } else if (messageType == RpcMessageTypes.RpcMessageTypes_REMOTE_ERROR_RESPONSE) {
         throwIfRemoteError(message)
         debugger
       }
@@ -210,10 +219,13 @@ export async function createRpcClient(transport: Transport): Promise<RpcClient> 
 
   async function internalCreatePort(portName: string): Promise<RpcClientPort> {
     const ret = await dispatcher.request((bb, messageNumber) => {
-      writeCreatePort(bb, {
-        messageIdentifier: calculateMessageIdentifier(RpcMessageTypes.CREATE_PORT, messageNumber),
-        portName,
-      })
+      CreatePort.encode(
+        {
+          messageIdentifier: calculateMessageIdentifier(RpcMessageTypes.RpcMessageTypes_CREATE_PORT, messageNumber),
+          portName,
+        },
+        bb
+      )
     })
 
     const parsedMessage = parseProtocolMessage(ret)
@@ -221,10 +233,10 @@ export async function createRpcClient(transport: Transport): Promise<RpcClient> 
     if (parsedMessage) {
       const [messageType, message] = parsedMessage
 
-      if (messageType == RpcMessageTypes.CREATE_PORT_RESPONSE) {
+      if (messageType == RpcMessageTypes.RpcMessageTypes_CREATE_PORT_RESPONSE) {
         const portId = (message as CreatePortResponse).portId
         return createPort(portId, portName, dispatcher)
-      } else if (messageType == RpcMessageTypes.REMOTE_ERROR_RESPONSE) {
+      } else if (messageType == RpcMessageTypes.RpcMessageTypes_REMOTE_ERROR_RESPONSE) {
         throwIfRemoteError(message)
       }
     }

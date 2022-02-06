@@ -1,7 +1,6 @@
 import { RpcClient } from "../src"
-import { createEncoder, toUint8Array } from "../src/encdec/encoding"
 import { calculateMessageIdentifier } from "../src/protocol/helpers"
-import { RpcMessageTypes, writeRpcMessageHeader } from "../src/protocol/wire-protocol"
+import { RpcMessageHeader, RpcMessageTypes } from "../src/protocol/pbjs"
 import { createSimpleTestEnvironment } from "./helpers"
 
 async function testPort(rpcClient: RpcClient, portName: string) {
@@ -92,18 +91,18 @@ describe("Error in transport finalizes streams", () => {
 })
 
 describe("Close transport closes streams (client side)", () => {
-  let infiniteStreamClosed = false
+  let infiniteStreamClosed = 0
   const testEnv = createSimpleTestEnvironment({
     async initializePort(port) {
       port.registerModule("echo", async (port) => ({
         async *infinite() {
           try {
-            infiniteStreamClosed = false
+            infiniteStreamClosed = 1
             while (true) {
               yield Uint8Array.from([1])
             }
           } finally {
-            infiniteStreamClosed = true
+            infiniteStreamClosed = 2
           }
         },
       }))
@@ -115,11 +114,12 @@ describe("Close transport closes streams (client side)", () => {
 
     const { infinite } = await testPort(rpcClient, "port1")
 
-    expect(infiniteStreamClosed).toEqual(false)
+    expect(infiniteStreamClosed).toEqual(0)
     let count = 0
 
     await expect(async () => {
       for await (const _ of await infinite()) {
+        expect(infiniteStreamClosed).toEqual(1)
         if (count++ == 10) {
           transportClient.close()
         }
@@ -127,7 +127,7 @@ describe("Close transport closes streams (client side)", () => {
     }).rejects.toThrow("RPC Transport closed")
 
     // the server AsyncGenerators must be closed after the transport is closed to avoid leaks
-    expect(infiniteStreamClosed).toEqual(true)
+    expect(infiniteStreamClosed).toEqual(2)
   })
 })
 
@@ -190,7 +190,7 @@ async function setupForFailures() {
 
   function logEvent(evt: string) {
     events.push(evt)
-    process.stderr.write(evt + '\n')
+    process.stderr.write(evt + "\n")
   }
 
   transportServer.on("close", () => logEvent("transport: close"))
@@ -217,11 +217,13 @@ describe("Unknown packets in the network close the transport", () => {
     const { events, transportServer } = await setupForFailures()
 
     // sending invalid packages should raise an error
-    const bb = createEncoder()
-    writeRpcMessageHeader(bb, {
-      messageIdentifier: calculateMessageIdentifier(RpcMessageTypes.CREATE_PORT_RESPONSE, 0),
-    })
-    transportServer.emit("message", toUint8Array(bb))
+
+    transportServer.emit(
+      "message",
+      RpcMessageHeader.encode({
+        messageIdentifier: calculateMessageIdentifier(RpcMessageTypes.RpcMessageTypes_CREATE_PORT_RESPONSE, 0),
+      }).finish()
+    )
     expect(events).toEqual(["rpc: transportError", "rpc: transportClosed", "transport: close", "transport: error"])
   })
 
@@ -229,15 +231,24 @@ describe("Unknown packets in the network close the transport", () => {
     const { events, transportServer } = await setupForFailures()
 
     // sending invalid packages should raise an error
-    const bb = createEncoder()
-    writeRpcMessageHeader(bb, {
-      messageIdentifier: calculateMessageIdentifier(0xfff, 0),
-    })
-    transportServer.emit("message", toUint8Array(bb))
+    transportServer.emit(
+      "message",
+      RpcMessageHeader.encode({
+        messageIdentifier: calculateMessageIdentifier(0xfff, 0),
+      }).finish()
+    )
     expect(events).toEqual(["rpc: transportError", "rpc: transportClosed", "transport: close", "transport: error"])
   })
 
   it("disconnects the transport under unknown messages", async () => {
+    const { events, transportServer } = await setupForFailures()
+
+    // sending random things should not break anything
+    transportServer.emit("message", Uint8Array.from([128, 109]))
+    expect(events).toEqual(["rpc: transportError", "rpc: transportClosed", "transport: close", "transport: error"])
+  })
+
+  it("disconnects the transport under unknown messages 2", async () => {
     const { events, transportServer } = await setupForFailures()
 
     // sending random things should not break anything
