@@ -1,3 +1,4 @@
+import { Suite } from "benchmark"
 import * as helpers from "./helpers"
 import { Book, GetBookRequest, QueryBooksRequest } from "./codegen/client_pb"
 import { RpcClientPort, RpcServerPort } from "../src"
@@ -78,9 +79,7 @@ async function test() {
     },
   })
 
-  await testEnv.start()
-
-  const { rpcClient } = testEnv
+  const { rpcClient } = await testEnv.start()
   const clientPort = await rpcClient.createPort("test1")
   const service = loadBookService(clientPort)
 
@@ -88,23 +87,38 @@ async function test() {
   const req2 = new QueryBooksRequest()
   req1.setIsbn(1234)
   req2.setAuthorPrefix("mr")
-  let iter = 0
 
-  while (iter++ < 100000) {
-    {
-      const ret = await service.GetBook(req1)
-      if (ret.getIsbn() != 1234) throw new Error("invalid number")
-    }
-    {
-      const results = []
+  const suite = new Suite()
 
-      for await (const book of service.QueryBooks(req2)) {
-        results.push(book)
-      }
+  suite
+    .add("GetBook", {
+      defer: true,
+      async fn(deferred) {
+        const ret = await service.GetBook(req1)
+        if (ret.getIsbn() != 1234) deferred.reject(new Error("invalid number"))
+        deferred.resolve()
+      },
+    })
+    .add("QueryBooks", {
+      defer: true,
+      async fn(deferred) {
+        const results = []
 
-      if (results.length != 4) throw new Error("invalid length")
-    }
-  }
+        for await (const book of service.QueryBooks(req2)) {
+          results.push(book)
+        }
+
+        if (results.length != 4) throw new Error("invalid length")
+        deferred.resolve()
+      },
+    })
+    .on("cycle", function(event) {
+      console.log(String(event.target));
+    })
+    .on("complete", function() {
+      console.log("Fastest is " + this.filter("fastest").map("name"));
+    })
+    .run({ async: true })
 }
 
 test().catch((err) => {

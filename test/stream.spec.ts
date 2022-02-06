@@ -69,7 +69,7 @@ describe("Helpers simple req/res", () => {
   })
 
   it("basic iteration", async () => {
-    const { rpcClient } = testEnv
+    const { rpcClient } = await testEnv.start()
     const port = await rpcClient.createPort("test1")
     const module = (await port.loadModule("echo")) as {
       basic(): Promise<AsyncGenerator<Uint8Array>>
@@ -82,7 +82,7 @@ describe("Helpers simple req/res", () => {
   })
 
   it("fails in async generator before yielding, the async iterator in our end throws", async () => {
-    const { rpcClient } = testEnv
+    const { rpcClient } = await testEnv.start()
     const port = await rpcClient.createPort("test1")
     const module = (await port.loadModule("echo")) as {
       throwFirst(): Promise<AsyncGenerator<Uint8Array>>
@@ -99,7 +99,7 @@ describe("Helpers simple req/res", () => {
   })
 
   it("yields one result and then throws. must end the stream with exception and the first result must arrive correctly", async () => {
-    const { rpcClient } = testEnv
+    const { rpcClient } = await testEnv.start()
     const port = await rpcClient.createPort("test1")
     const module = (await port.loadModule("echo")) as {
       throwSecond(): Promise<AsyncGenerator<Uint8Array>>
@@ -116,7 +116,7 @@ describe("Helpers simple req/res", () => {
   })
 
   it("a remote infiniteCounter is stopped via exception from client side on third iteration", async () => {
-    const { rpcClient } = testEnv
+    const { rpcClient } = await testEnv.start()
     const port = await rpcClient.createPort("test1")
     const module = (await port.loadModule("echo")) as {
       infiniteCounter(): Promise<AsyncGenerator<Uint8Array>>
@@ -140,7 +140,7 @@ describe("Helpers simple req/res", () => {
   })
 
   it("a remote infiniteCounter is gracefully stopped from client side on third iteration", async () => {
-    const { rpcClient } = testEnv
+    const { rpcClient } = await testEnv.start()
     const port = await rpcClient.createPort("test1")
     const module = (await port.loadModule("echo")) as {
       infiniteCounter(): Promise<AsyncGenerator<Uint8Array>>

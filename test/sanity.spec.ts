@@ -52,7 +52,7 @@ describe("Helpers simple req/res", () => {
   })
 
   it("creates the server", async () => {
-    const { rpcClient } = testEnv
+    const { rpcClient } = await testEnv.start()
 
     const port1 = await testPort(rpcClient, "port1")
     const port2 = await testPort(rpcClient, "port2")

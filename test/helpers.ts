@@ -1,8 +1,9 @@
-import { BinaryReader } from "google-protobuf"
 import { createRpcClient, createRpcServer, CreateRpcServerOptions, RpcClient } from "../src"
 import { log } from "./logger"
+import { inspect } from "util"
 import { MemoryTransport } from "../src/transports/Memory"
 import { parseProtocolMessage } from "../src/protocol/helpers"
+import { createDecoder } from "../src/encdec/decoding"
 
 // async Array.from(generator*) with support for max elements
 export async function takeAsync<T>(iter: AsyncGenerator<T>, max?: number) {
@@ -22,61 +23,68 @@ export function instrumentTransport(memoryTransport: ReturnType<typeof MemoryTra
   log("> Creating memory transport")
 
   function serialize(data: Uint8Array) {
-    const ret = parseProtocolMessage(new BinaryReader(data))
-    if (!ret) return null
-    return ret[0].toObject()
+    const ret = parseProtocolMessage(createDecoder(data))
+    if (!ret) return inspect(data)
+    return ret[1]
   }
 
   // only instrument while running tests
-  if(typeof it == 'function'){
+  if (typeof it == "function") {
+    client.on("close", (data) => {
+      log("  (client): closed")
+    })
+    client.on("error", (data) => {
+      log("  (client error): " + data)
+    })
+    client.on("message", (data) => {
+      try {
+        log("  (wire server->client): " + JSON.stringify(serialize(data)))
+      } catch (err) {
+        console.error(err)
+      }
+    })
 
-  client.on("message", (data) => {
-    try {
-      log("  (wire server->client): " + JSON.stringify(serialize(data)))
-    } catch (err) {
-      console.error(err)
-    }
-  })
-
-
-  server.on("message", (data) => {
-    try {
-      log("  (wire client->server): " + JSON.stringify(serialize(data)))
-    } catch (err) {
-      console.error(err)
-    }
-  })
-}
+    server.on("close", (data) => {
+      log("  (server): closed")
+    })
+    server.on("error", (data) => {
+      log("  (server error): " + data)
+    })
+    server.on("message", (data) => {
+      try {
+        log("  (wire client->server): " + JSON.stringify(serialize(data)))
+      } catch (err) {
+        console.error(err)
+      }
+    })
+  }
 
   return memoryTransport
 }
 
 export function createSimpleTestEnvironment(options: CreateRpcServerOptions) {
-  const memoryTransport = MemoryTransport()
-  let rpcClient: RpcClient
-  instrumentTransport(memoryTransport)
-
-  const rpcServer = createRpcServer(options)
-
   async function start() {
+    const memoryTransport = MemoryTransport()
+    let rpcClient: RpcClient
+    instrumentTransport(memoryTransport)
+
+    const rpcServer = createRpcServer(options)
+
+    let clientClosed = false
+    let serverClosed = false
+    memoryTransport.client.on("close", () => (clientClosed = true))
+    memoryTransport.server.on("close", () => (serverClosed = true))
+
+    if (serverClosed) throw new Error("This server is already closed. Use a new testing environment")
     log("> Creating RPC Client")
     setImmediate(() => rpcServer.attachTransport(memoryTransport.server))
     rpcClient = await createRpcClient(memoryTransport.client)
-  }
+    clientClosed = false
 
-  if (typeof beforeAll !== "undefined") beforeAll(start)
+    return { rpcClient, rpcServer, transportClient: memoryTransport.client, transportServer: memoryTransport.server }
+  }
 
   return {
     start,
-    get rpcServer() {
-      if (!rpcServer) throw new Error("Must se the rpcServer only inside a `it`")
-      return rpcServer
-    },
-    get rpcClient() {
-      if (!rpcClient) throw new Error("Must se the rpcClient only inside a `it`")
-      return rpcClient
-    },
-    transportClient: memoryTransport.client,
-    transportServer: memoryTransport.server,
   }
 }

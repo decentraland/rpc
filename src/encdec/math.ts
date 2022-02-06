@@ -1,0 +1,60 @@
+// https://github.com/dmonad/lib0
+
+/**
+ * Common Math expressions.
+ *
+ * @module math
+ */
+
+export const floor = Math.floor
+export const ceil = Math.ceil
+export const abs = Math.abs
+export const imul = Math.imul
+export const round = Math.round
+export const log10 = Math.log10
+export const log2 = Math.log2
+export const log = Math.log
+export const sqrt = Math.sqrt
+
+/**
+ * @function
+ * @param {number} a
+ * @param {number} b
+ * @return {number} The sum of a and b
+ */
+export const add = (a: number, b: number): number => a + b
+
+/**
+ * @function
+ * @param {number} a
+ * @param {number} b
+ * @return {number} The smaller element of a and b
+ */
+export const min = (a: number, b: number): number => (a < b ? a : b)
+
+/**
+ * @function
+ * @param {number} a
+ * @param {number} b
+ * @return {number} The bigger element of a and b
+ */
+export const max = (a: number, b: number): number => (a > b ? a : b)
+
+export const isNaN = Number.isNaN
+
+export const pow = Math.pow
+/**
+ * Base 10 exponential function. Returns the value of 10 raised to the power of pow.
+ *
+ * @param {number} exp
+ * @return {number}
+ */
+export const exp10 = (exp: number): number => Math.pow(10, exp)
+
+export const sign = Math.sign
+
+/**
+ * @param {number} n
+ * @return {boolean} Wether n is negative. This function also differentiates between -0 and +0
+ */
+export const isNegativeZero = (n: number): boolean => (n !== 0 ? n < 0 : 1 / n < 0)

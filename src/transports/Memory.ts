@@ -13,7 +13,6 @@ export function MemoryTransport() {
       },
       close() {
         sender.emit("close", {})
-        receiver.emit("close", {})
       },
     }
   }
@@ -28,6 +27,8 @@ export function MemoryTransport() {
       client.emit("connect", {})
     }
   })
+
+  server.on("close", () => client.close())
 
   return {
     client,

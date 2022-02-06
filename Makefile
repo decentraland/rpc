@@ -40,7 +40,7 @@ test:
 		--ts_out="$(PWD)/test/codegen" \
 		-I="$(PWD)/test/codegen" \
 		"$(PWD)/test/codegen/client.proto"
-	node_modules/.bin/jest --detectOpenHandles --colors --runInBand $(TESTARGS) --coverage
+	node_modules/.bin/jest --detectOpenHandles --colors --runInBand $(TESTARGS) --coverage $(TEST_FILE)
 
 test-watch:
 	node_modules/.bin/jest --detectOpenHandles --colors --runInBand --watch $(TESTARGS) --coverage
@@ -60,9 +60,6 @@ build:
 	./node_modules/.bin/api-extractor run $(LOCAL_ARG) --typescript-compiler-folder ./node_modules/typescript
 
 cheap-perf:
-	@time node_modules/.bin/ts-node test/bench.ts
-	@time node_modules/.bin/ts-node test/bench.ts
-	@time node_modules/.bin/ts-node test/bench.ts
 	@time node_modules/.bin/ts-node test/bench.ts
 
 .PHONY: build test cheap-perf
