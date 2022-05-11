@@ -1,4 +1,4 @@
-import { generateProtoFile, generateTsProtocol } from "./print-proto-dsl"
+import { generateProtoFile } from "./print-proto-dsl"
 import { field, protoDsl } from "./proto-dsl"
 import { writeFileSync } from "fs"
 
