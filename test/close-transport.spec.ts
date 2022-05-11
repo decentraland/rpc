@@ -1,6 +1,6 @@
 import { RpcClient } from "../src"
 import { calculateMessageIdentifier } from "../src/protocol/helpers"
-import { RpcMessageHeader, RpcMessageTypes } from "../src/protocol/index_pb"
+import { RpcMessageHeader, RpcMessageTypes } from "../src/protocol"
 import { createSimpleTestEnvironment } from "./helpers"
 
 async function testPort(rpcClient: RpcClient, portName: string) {
@@ -30,7 +30,7 @@ describe("Close transport closes streams (server side)", () => {
   })
 
   it("creates the server", async () => {
-    const { rpcClient, transportServer } = testEnv
+    const { rpcClient, transportServer } = await testEnv.start()
 
     const { infinite } = await testPort(rpcClient, "port1")
 
@@ -49,7 +49,6 @@ describe("Close transport closes streams (server side)", () => {
     expect(infiniteStreamClosed).toEqual(true)
   })
 })
-
 
 describe("Error in transport finalizes streams", () => {
   let infiniteStreamClosed = false
@@ -71,7 +70,7 @@ describe("Error in transport finalizes streams", () => {
   })
 
   it("creates the server", async () => {
-    const { rpcClient, transportServer } = testEnv
+    const { rpcClient, transportServer } = await testEnv.start()
 
     const { infinite } = await testPort(rpcClient, "port1")
 
@@ -81,7 +80,7 @@ describe("Error in transport finalizes streams", () => {
     await expect(async () => {
       for await (const _ of await infinite()) {
         if (count++ == 10) {
-          transportServer.emit('error', new Error('SOCKET DISCONNECTED'))
+          transportServer.emit("error", new Error("SOCKET DISCONNECTED"))
         }
       }
     }).rejects.toThrow("RPC Transport closed")
@@ -91,21 +90,19 @@ describe("Error in transport finalizes streams", () => {
   })
 })
 
-
-
 describe("Close transport closes streams (client side)", () => {
-  let infiniteStreamClosed = false
+  let infiniteStreamClosed = 0
   const testEnv = createSimpleTestEnvironment({
     async initializePort(port) {
       port.registerModule("echo", async (port) => ({
         async *infinite() {
           try {
-            infiniteStreamClosed = false
+            infiniteStreamClosed = 1
             while (true) {
               yield Uint8Array.from([1])
             }
           } finally {
-            infiniteStreamClosed = true
+            infiniteStreamClosed = 2
           }
         },
       }))
@@ -113,15 +110,16 @@ describe("Close transport closes streams (client side)", () => {
   })
 
   it("creates the server", async () => {
-    const { rpcClient, transportClient } = testEnv
+    const { rpcClient, transportClient } = await testEnv.start()
 
     const { infinite } = await testPort(rpcClient, "port1")
 
-    expect(infiniteStreamClosed).toEqual(false)
+    expect(infiniteStreamClosed).toEqual(0)
     let count = 0
 
     await expect(async () => {
       for await (const _ of await infinite()) {
+        expect(infiniteStreamClosed).toEqual(1)
         if (count++ == 10) {
           transportClient.close()
         }
@@ -129,7 +127,7 @@ describe("Close transport closes streams (client side)", () => {
     }).rejects.toThrow("RPC Transport closed")
 
     // the server AsyncGenerators must be closed after the transport is closed to avoid leaks
-    expect(infiniteStreamClosed).toEqual(true)
+    expect(infiniteStreamClosed).toEqual(2)
   })
 })
 
@@ -153,7 +151,7 @@ describe("Error in transport closes the transport", () => {
   })
 
   it("creates the server", async () => {
-    const { rpcClient, transportServer } = testEnv
+    const { rpcClient, transportServer } = await testEnv.start()
 
     const { infinite } = await testPort(rpcClient, "port1")
 
@@ -173,7 +171,7 @@ describe("Error in transport closes the transport", () => {
   })
 })
 
-describe("Unknown packets in the network close the transport", () => {
+async function setupForFailures() {
   const testEnv = createSimpleTestEnvironment({
     async initializePort(port) {
       port.registerModule("echo", async () => ({
@@ -184,31 +182,77 @@ describe("Unknown packets in the network close the transport", () => {
     },
   })
 
+  const { rpcClient, rpcServer, transportServer } = await testEnv.start()
+
+  const { infinite } = await testPort(rpcClient, "port1")
+
+  const events: string[] = []
+
+  function logEvent(evt: string) {
+    events.push(evt)
+    process.stderr.write(evt + "\n")
+  }
+
+  transportServer.on("close", () => logEvent("transport: close"))
+  transportServer.on("error", () => logEvent("transport: error"))
+  rpcServer.on("transportClosed", () => logEvent("rpc: transportClosed"))
+  rpcServer.on("transportError", () => logEvent("rpc: transportError"))
+
+  // make sure everything works
+  await infinite()
+
+  expect(events).toEqual([])
+
+  return { events, rpcClient, rpcServer, transportServer, testEnv }
+}
+
+describe("Unknown packets in the network close the transport", () => {
+  it("disconnects the transport on empty messages", async () => {
+    const { events, transportServer } = await setupForFailures()
+    transportServer.emit("message", Uint8Array.of())
+    expect(events).toEqual(["rpc: transportError", "rpc: transportClosed", "transport: close", "transport: error"])
+  })
+
+  it("disconnects the transport under known malformed messages", async () => {
+    const { events, transportServer } = await setupForFailures()
+
+    // sending invalid packages should raise an error
+
+    transportServer.emit(
+      "message",
+      RpcMessageHeader.encode({
+        messageIdentifier: calculateMessageIdentifier(RpcMessageTypes.RpcMessageTypes_CREATE_PORT_RESPONSE, 0),
+      }).finish()
+    )
+    expect(events).toEqual(["rpc: transportError", "rpc: transportClosed", "transport: close", "transport: error"])
+  })
+
+  it("disconnects the transport under unknown message type", async () => {
+    const { events, transportServer } = await setupForFailures()
+
+    // sending invalid packages should raise an error
+    transportServer.emit(
+      "message",
+      RpcMessageHeader.encode({
+        messageIdentifier: calculateMessageIdentifier(0xfff, 0),
+      }).finish()
+    )
+    expect(events).toEqual(["rpc: transportError", "rpc: transportClosed", "transport: close", "transport: error"])
+  })
+
   it("disconnects the transport under unknown messages", async () => {
-    const { rpcClient, rpcServer, transportServer } = testEnv
+    const { events, transportServer } = await setupForFailures()
 
-    const { infinite } = await testPort(rpcClient, "port1")
+    // sending random things should not break anything
+    transportServer.emit("message", Uint8Array.from([128, 109]))
+    expect(events).toEqual(["rpc: transportError", "rpc: transportClosed", "transport: close", "transport: error"])
+  })
 
-    const events: string[] = []
-
-    transportServer.on("close", () => events.push("transport: close"))
-    transportServer.on("error", () => events.push("transport: error"))
-    rpcServer.on("transportClosed", () => events.push("rpc: transportClosed"))
-    rpcServer.on("transportError", () => events.push("rpc: transportError"))
-
-    // make sure everything works
-    await infinite()
-
-    expect(events).toEqual([])
+  it("disconnects the transport under unknown messages 2", async () => {
+    const { events, transportServer } = await setupForFailures()
 
     // sending random things should not break anything
     transportServer.emit("message", Uint8Array.from([8, 109]))
-    expect(events).toEqual([])
-
-    // sending invalid packages should raise an error
-    const badPacket = new RpcMessageHeader()
-    badPacket.setMessageIdentifier(calculateMessageIdentifier(RpcMessageTypes.RPCMESSAGETYPES_CREATE_PORT_RESPONSE, 0))
-    transportServer.emit("message", badPacket.serializeBinary())
     expect(events).toEqual(["rpc: transportError", "rpc: transportClosed", "transport: close", "transport: error"])
   })
 })

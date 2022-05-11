@@ -1,5 +1,5 @@
 import { RpcServerPort } from "../src"
-import { Book, GetBookRequest, QueryBooksRequest } from "./codegen/client_pb"
+import { Book, GetBookRequest, QueryBooksRequest } from "./codegen/client"
 import { createSimpleTestEnvironment, takeAsync } from "./helpers"
 import * as codegen from "../src/codegen"
 import { loadBookService } from "./codegen-client.spec"
@@ -32,16 +32,16 @@ describe("codegen client & server", () => {
     async initializePort(port) {
       registerBookService(port, async () => ({
         async GetBook(req: GetBookRequest) {
-          if (req.getIsbn() == FAIL_WITH_EXCEPTION_ISBN) throw new Error("ErrorMessage")
+          if (req.isbn == FAIL_WITH_EXCEPTION_ISBN) throw new Error("ErrorMessage")
 
-          const book = new Book()
-          book.setAuthor("menduz")
-          book.setIsbn(req.getIsbn())
-          book.setTitle("Rpc onion layers")
-          return book
+          return {
+            author: "menduz",
+            isbn: req.isbn,
+            title: "Rpc onion layers",
+          }
         },
         async *QueryBooks(req: QueryBooksRequest) {
-          if (req.getAuthorPrefix() == "fail_before_yield") throw new Error("fail_before_yield")
+          if (req.authorPrefix == "fail_before_yield") throw new Error("fail_before_yield")
 
           const books = [
             { author: "mr menduz", isbn: 1234, title: "1001 reasons to write your own OS" },
@@ -51,16 +51,12 @@ describe("codegen client & server", () => {
           ]
 
           for (const book of books) {
-            if (book.author.includes(req.getAuthorPrefix())) {
-              const protoBook = new Book()
-              protoBook.setAuthor(book.author)
-              protoBook.setIsbn(book.isbn)
-              protoBook.setTitle(book.title)
-              yield protoBook
+            if (book.author.includes(req.authorPrefix)) {
+              yield book
             }
           }
 
-          if (req.getAuthorPrefix() == "fail_before_end") throw new Error("fail_before_end")
+          if (req.authorPrefix == "fail_before_end") throw new Error("fail_before_end")
         },
       }))
     },
@@ -69,30 +65,23 @@ describe("codegen client & server", () => {
   let service: BookService
 
   it("basic service wraper creation", async () => {
-    const { rpcClient } = testEnv
+    const { rpcClient } = await testEnv.start()
 
     const clientPort = await rpcClient.createPort("test1")
     service = loadBookService(clientPort)
   })
 
   it("calls an unary method", async () => {
-    const req = new GetBookRequest()
-    req.setIsbn(1234)
-    const ret = await service.GetBook(req)
-    expect(ret).toBeInstanceOf(Book)
-    expect(ret.getIsbn()).toEqual(1234)
-    expect(ret.getAuthor()).toEqual("menduz")
+    const ret = await service.GetBook({ isbn: 1234 })
+    expect(ret.isbn).toEqual(1234)
+    expect(ret.author).toEqual("menduz")
   })
 
   it("calls a streaming method", async () => {
-    const req = new QueryBooksRequest()
-    req.setAuthorPrefix("mr")
-
     const results: Book[] = []
 
-    for await (const book of service.QueryBooks(req)) {
-      expect(book).toBeInstanceOf(Book)
-      expect(book.getAuthor()).toMatch(/^mr\s.+/)
+    for await (const book of service.QueryBooks({ authorPrefix: "mr" })) {
+      expect(book.author).toMatch(/^mr\s.+/)
       results.push(book)
     }
 
@@ -100,20 +89,18 @@ describe("codegen client & server", () => {
   })
 
   it("calls to unary fails throws error in client", async () => {
-    const req = new GetBookRequest()
-    req.setIsbn(FAIL_WITH_EXCEPTION_ISBN)
-    await expect(service.GetBook(req)).rejects.toThrowError("RemoteError: ErrorMessage")
+    await expect(service.GetBook({ isbn: FAIL_WITH_EXCEPTION_ISBN })).rejects.toThrowError("RemoteError: ErrorMessage")
   })
 
   it("calls to streaming fails throws error in client, fail_before_yield", async () => {
-    const req = new QueryBooksRequest()
-    req.setAuthorPrefix("fail_before_yield")
-    await expect(service.QueryBooks(req).next()).rejects.toThrowError("RemoteError: fail_before_yield")
+    await expect(service.QueryBooks({ authorPrefix: "fail_before_yield" }).next()).rejects.toThrowError(
+      "RemoteError: fail_before_yield"
+    )
   })
 
   it("calls to streaming fails throws error in client, fail_before_end", async () => {
-    const req = new QueryBooksRequest()
-    req.setAuthorPrefix("fail_before_end")
-    await expect(() => takeAsync(service.QueryBooks(req))).rejects.toThrowError("RemoteError: fail_before_end")
+    await expect(() => takeAsync(service.QueryBooks({ authorPrefix: "fail_before_end" }))).rejects.toThrowError(
+      "RemoteError: fail_before_end"
+    )
   })
 })

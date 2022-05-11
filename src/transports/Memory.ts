@@ -6,14 +6,17 @@ export function MemoryTransport() {
   const serverEd = mitt<TransportEvents>()
 
   function configureMemoryTransport(receiver: Emitter<TransportEvents>, sender: Emitter<TransportEvents>): Transport {
+    let isClosed = false
     return {
       ...sender,
       sendMessage(message) {
         receiver.emit("message", new Uint8Array(message))
       },
       close() {
-        sender.emit("close", {})
-        receiver.emit("close", {})
+        if (!isClosed) {
+          isClosed = true
+          sender.emit("close", {})
+        }
       },
     }
   }
@@ -28,6 +31,9 @@ export function MemoryTransport() {
       client.emit("connect", {})
     }
   })
+
+  server.on("close", () => client.close())
+  client.on("close", () => server.close())
 
   return {
     client,

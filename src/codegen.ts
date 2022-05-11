@@ -1,88 +1,85 @@
-import { Message } from "google-protobuf"
+import { Writer, Reader } from "protobufjs/minimal"
 
-export type Constructor<C> = { new (): C; deserializeBinary(data: Uint8Array): C }
+export interface Message<T> {
+  encode(message: T, writer?: Writer): Writer
+  decode(input: Reader | Uint8Array, length?: number): T
+  fromJSON(object: any): T
+  toJSON(message: T): unknown
+}
 
-export function clientProcedureUnary<Ctor1 extends Message, Ctor2 extends Message>(
+export function clientProcedureUnary<Ctor1, Ctor2>(
   port: unknown | Promise<unknown>,
   name: string,
-  requestType: Constructor<Ctor1>,
-  requestResponseConstructor: Constructor<Ctor2>
+  requestType: Message<Ctor1>,
+  requestResponseConstructor: Message<Ctor2>
 ) {
-  const fn: (arg: Ctor1) => Promise<Ctor2> = async (arg: any): Promise<any> => {
+  const fn = async (arg: Ctor1): Promise<Ctor2> => {
     const remoteModule: Record<typeof name, (arg: Uint8Array) => Promise<any>> = (await port) as any
 
-    if (!(arg instanceof requestType)) throw new Error("Argument passed to RPC Method " + name + " type mismatch.")
     if (!(name in remoteModule)) throw new Error("Method " + name + " not implemented in server port")
 
-    const result = await remoteModule[name](arg.serializeBinary())
+    const result = await remoteModule[name](requestType.encode(arg).finish())
     if (!result) {
       throw new Error("Server sent an empty or null response to method call " + name)
     }
-    return requestResponseConstructor.deserializeBinary(result)
+    return requestResponseConstructor.decode(result)
   }
 
   return fn
 }
 
-export function clientProcedureStream<Ctor1 extends Message, Ctor2 extends Message>(
+export function clientProcedureStream<Ctor1, Ctor2>(
   port: unknown | Promise<unknown>,
   name: string,
-  requestType: Constructor<Ctor1>,
-  requestResponseConstructor: Constructor<Ctor2>
+  requestType: Message<Ctor1>,
+  requestResponseConstructor: Message<Ctor2>
 ) {
-  const fn: (arg: Ctor1) => AsyncGenerator<Ctor2> = async function* (arg: any) {
+  const fn = async function* (arg: Ctor1): AsyncGenerator<Ctor2> {
     const remoteModule: Record<typeof name, (arg: Uint8Array) => Promise<any>> = (await port) as any
 
-    if (!(arg instanceof requestType)) throw new Error("Argument passed to RPC Method " + name + " type mismatch.")
     if (!(name in remoteModule)) throw new Error("Method " + name + " not implemented in server port")
 
-    const result = await remoteModule[name](arg.serializeBinary())
+    const result = await remoteModule[name](requestType.encode(arg).finish())
     if (!result) {
       throw new Error("Server sent an empty or null response to method call " + name)
     }
     for await (const bytes of await result) {
-      yield requestResponseConstructor.deserializeBinary(bytes)
+      yield requestResponseConstructor.decode(bytes)
     }
   }
 
   return fn
 }
 
-export function serverProcedureUnary<Ctor1 extends Message, Ctor2 extends Message>(
+export function serverProcedureUnary<Ctor1, Ctor2>(
   fn: (arg: Ctor1) => Promise<Ctor2>,
   name: string,
-  ctor1: Constructor<Ctor1>,
-  ctor2: Constructor<Ctor2>
+  ctor1: Message<Ctor1>,
+  ctor2: Message<Ctor2>
 ): (arg: Uint8Array) => Promise<Uint8Array> {
   return async function (argBinary) {
-    const arg = ctor1.deserializeBinary(argBinary)
+    const arg = ctor1.decode(argBinary)
     const result = await fn(arg)
 
     if (!result) throw new Error("Empty or null responses are not allowed. Procedure: " + name)
-    if (!(result instanceof ctor2))
-      throw new Error("Result of procedure " + name + " did not match the expected constructor")
-
-    return result.serializeBinary()
+    return ctor2.encode(result).finish()
   }
 }
 
-export function serverProcedureStream<Ctor1 extends Message, Ctor2 extends Message>(
+export function serverProcedureStream<Ctor1, Ctor2>(
   fn: (arg: Ctor1) => Promise<AsyncGenerator<Ctor2>> | AsyncGenerator<Ctor2>,
   name: string,
-  ctor1: Constructor<Ctor1>,
-  ctor2: Constructor<Ctor2>
+  ctor1: Message<Ctor1>,
+  ctor2: Message<Ctor2>
 ): (arg: Uint8Array) => AsyncGenerator<Uint8Array> {
   return async function* (argBinary) {
-    const arg = ctor1.deserializeBinary(argBinary)
+    const arg = ctor1.decode(argBinary)
     const result = await fn(arg)
 
     if (!result) throw new Error("Empty or null responses are not allowed. Procedure: " + name)
 
     for await (const elem of result) {
-      if (!(elem instanceof ctor2))
-        throw new Error("Yielded result of procedure " + name + " did not match the expected constructor")
-
-      yield elem.serializeBinary()
+      yield ctor2.encode(elem).finish()
     }
   }
 }

@@ -15,19 +15,19 @@ async function testPort(rpcClient: RpcClient, portName: string) {
   return port
 }
 
-describe("Helpers simple req/res", () => {
-  const testEnv = createSimpleTestEnvironment({
-    async initializePort(port) {
-      port.registerModule("echo", async (port) => ({
-        async getPortId() {
-          return Uint8Array.from([port.portId % 0xff])
-        },
-      }))
-    },
-  })
+const testEnv = createSimpleTestEnvironment({
+  async initializePort(port) {
+    port.registerModule("echo", async (port) => ({
+      async getPortId() {
+        return Uint8Array.from([port.portId % 0xff])
+      },
+    }))
+  },
+})
 
+describe("Helpers simple req/res", () => {
   it("creates the server", async () => {
-    const { rpcClient } = testEnv
+    const { rpcClient } = await testEnv.start()
 
     const port1 = await testPort(rpcClient, "port1")
     const port2 = await testPort(rpcClient, "port2")
@@ -41,18 +41,8 @@ describe("Helpers simple req/res", () => {
 })
 
 describe("Close ports", () => {
-  const testEnv = createSimpleTestEnvironment({
-    async initializePort(port) {
-      port.registerModule("echo", async (port) => ({
-        async getPortId() {
-          return Uint8Array.from([port.portId % 0xff])
-        },
-      }))
-    },
-  })
-
   it("When reusing open ports it returns the same ports", async () => {
-    const { rpcClient } = testEnv
+    const { rpcClient } = await testEnv.start()
 
     const port1 = await testPort(rpcClient, "port")
     const port2 = await testPort(rpcClient, "port")

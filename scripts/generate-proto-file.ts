@@ -112,7 +112,6 @@ proto.addMessage(
   ["RpcMessageHeader"]
 )
 
-
 /**
  * @description Signals the client about an error during the request
  *              execution or malformed input.

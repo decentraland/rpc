@@ -1,38 +1,35 @@
-import { BinaryReader } from "google-protobuf"
+import { Writer } from "protobufjs/minimal"
 import { Transport } from "./types"
-import { RpcMessageTypes, StreamMessage } from "./protocol/index_pb"
-import { getMessageIdentifier, parseMessageIdentifier } from "./protocol/helpers"
+import { parseMessageIdentifier } from "./protocol/helpers"
+import { StreamMessage } from "./protocol"
 
 export type AckDispatcher = {
-  transport: Transport
   sendWithAck(data: StreamMessage): Promise<StreamMessage>
+  receiveAck(data: StreamMessage, messageNumber: number): void
 }
 
 export function createAckHelper(transport: Transport): AckDispatcher {
   const oneTimeCallbacks = new Map<string, (msg: StreamMessage) => void>()
 
-  transport.on("message", (message) => {
-    const reader = new BinaryReader(message)
-    const [messageType, messageNumber] = getMessageIdentifier(reader)
-    if (messageType == RpcMessageTypes.RPCMESSAGETYPES_STREAM_ACK) {
-      reader.reset()
-      const data = StreamMessage.deserializeBinaryFromReader(new StreamMessage(), reader)
-      const key = `${messageNumber},${data.getSequenceId()}`
+  const bb = new Writer()
+
+  return {
+    receiveAck(data: StreamMessage, messageNumber: number) {
+      const key = `${messageNumber},${data.sequenceId}`
       const fut = oneTimeCallbacks.get(key)
       if (fut) {
         fut(data)
         oneTimeCallbacks.delete(key)
       }
-    }
-  })
-
-  return {
-    transport,
+    },
     async sendWithAck(data: StreamMessage): Promise<StreamMessage> {
       return new Promise<StreamMessage>((ret) => {
-        const [_, messageNumber] = parseMessageIdentifier(data.getMessageIdentifier())
-        oneTimeCallbacks.set(`${messageNumber},${data.getSequenceId()}`, ret)
-        transport.sendMessage(data.serializeBinary())
+        const [_, messageNumber] = parseMessageIdentifier(data.messageIdentifier)
+        oneTimeCallbacks.set(`${messageNumber},${data.sequenceId}`, ret)
+
+        bb.reset()
+        StreamMessage.encode(data, bb)
+        transport.sendMessage(bb.finish())
       })
     },
   }

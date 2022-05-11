@@ -1,9 +1,9 @@
 import { streamFromDispatcher } from "../src/client"
 import { messageNumberHandler } from "../src/message-number-handler"
 import { closeStreamMessage, streamMessage } from "../src/protocol/helpers"
-import { StreamMessage } from "../src/protocol/index_pb"
 import { MemoryTransport } from "../src/transports/Memory"
 import { instrumentTransport, takeAsync } from "./helpers"
+import { StreamMessage } from "../src/protocol"
 
 describe("streamFromDispatcher", () => {
   it("a CloseMessage from the server closes the iterator in the client", async () => {
@@ -14,7 +14,7 @@ describe("streamFromDispatcher", () => {
     const removeListenerSpy = jest.spyOn(dispatcher, "removeListener")
     const stream = streamFromDispatcher(
       dispatcher,
-      StreamMessage.deserializeBinary(streamMessage(MESSAGE_NUMBER, seq++, 0, new Uint8Array())),
+      StreamMessage.decode(streamMessage(MESSAGE_NUMBER, seq++, 0, new Uint8Array())),
       MESSAGE_NUMBER
     )
 
@@ -35,7 +35,7 @@ describe("streamFromDispatcher", () => {
     const addListenerSpy = jest.spyOn(dispatcher, "addListener")
     const stream = streamFromDispatcher(
       dispatcher,
-      StreamMessage.deserializeBinary(streamMessage(MESSAGE_NUMBER, seq++, 0, new Uint8Array())),
+      StreamMessage.decode(streamMessage(MESSAGE_NUMBER, seq++, 0, new Uint8Array())),
       MESSAGE_NUMBER
     )
 
@@ -57,7 +57,7 @@ describe("streamFromDispatcher", () => {
     const dispatcher = messageNumberHandler(transport.client)
     const stream = streamFromDispatcher(
       dispatcher,
-      StreamMessage.deserializeBinary(streamMessage(MESSAGE_NUMBER, seq++, 0, new Uint8Array())),
+      StreamMessage.decode(streamMessage(MESSAGE_NUMBER, seq++, 0, new Uint8Array())),
       MESSAGE_NUMBER
     )
 
@@ -77,7 +77,7 @@ describe("streamFromDispatcher", () => {
     const dispatcher = messageNumberHandler(transport.client)
     const stream = streamFromDispatcher(
       dispatcher,
-      StreamMessage.deserializeBinary(streamMessage(MESSAGE_NUMBER, 0, 0, PAYLOAD)),
+      StreamMessage.decode(streamMessage(MESSAGE_NUMBER, 0, 0, PAYLOAD)),
       MESSAGE_NUMBER
     )
 
@@ -97,7 +97,7 @@ describe("streamFromDispatcher", () => {
     const dispatcher = messageNumberHandler(transport.client)
     const stream = streamFromDispatcher(
       dispatcher,
-      StreamMessage.deserializeBinary(streamMessage(MESSAGE_NUMBER, seq++, 0, PAYLOAD)),
+      StreamMessage.decode(streamMessage(MESSAGE_NUMBER, seq++, 0, PAYLOAD)),
       MESSAGE_NUMBER
     )
 
@@ -115,7 +115,7 @@ describe("streamFromDispatcher", () => {
     const dispatcher = messageNumberHandler(transport.client)
     const stream = streamFromDispatcher(
       dispatcher,
-      StreamMessage.deserializeBinary(streamMessage(MESSAGE_NUMBER, seq++, 0, PAYLOAD)),
+      StreamMessage.decode(streamMessage(MESSAGE_NUMBER, seq++, 0, PAYLOAD)),
       MESSAGE_NUMBER
     )
     transport.server.sendMessage(closeStreamMessage(MESSAGE_NUMBER, seq++, 0))
@@ -130,7 +130,7 @@ describe("streamFromDispatcher", () => {
     const dispatcher = messageNumberHandler(transport.client)
     const stream = streamFromDispatcher(
       dispatcher,
-      StreamMessage.deserializeBinary(streamMessage(MESSAGE_NUMBER, seq++, 0, Uint8Array.from([1]))),
+      StreamMessage.decode(streamMessage(MESSAGE_NUMBER, seq++, 0, Uint8Array.from([1]))),
       MESSAGE_NUMBER
     )
 
@@ -152,7 +152,7 @@ describe("streamFromDispatcher", () => {
     const removeListenerSpy = jest.spyOn(dispatcher, "removeListener")
     const stream = streamFromDispatcher(
       dispatcher,
-      StreamMessage.deserializeBinary(streamMessage(MESSAGE_NUMBER, seq++, 0, Uint8Array.from([1]))),
+      StreamMessage.decode(streamMessage(MESSAGE_NUMBER, seq++, 0, Uint8Array.from([1]))),
       MESSAGE_NUMBER
     )
 
@@ -179,7 +179,7 @@ describe("streamFromDispatcher", () => {
     const removeListenerSpy = jest.spyOn(dispatcher, "removeListener")
     const stream = streamFromDispatcher(
       dispatcher,
-      StreamMessage.deserializeBinary(streamMessage(MESSAGE_NUMBER, seq++, 0, Uint8Array.from([1]))),
+      StreamMessage.decode(streamMessage(MESSAGE_NUMBER, seq++, 0, Uint8Array.from([1]))),
       MESSAGE_NUMBER
     )
 
