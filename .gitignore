@@ -9,3 +9,6 @@ test/codegen/*_pb.*
 test/codegen/*_pb.*
 
 **/*.log
+
+src/protocol/index.ts
+test/codegen/client.ts
