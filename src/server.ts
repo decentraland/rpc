@@ -41,15 +41,18 @@ export type CreateRpcServerOptions = {
   initializePort: (serverPort: RpcServerPort, transport: Transport) => Promise<void>
 }
 
+// only use this writer in synchronous operations. It exists to prevent allocations
+const unsafeSyncWriter = new Writer()
+
 function getServerReadyMessage() {
-  const bb = new Writer()
+  unsafeSyncWriter.reset()
   RpcMessageHeader.encode(
     {
       messageIdentifier: calculateMessageIdentifier(RpcMessageTypes.RpcMessageTypes_SERVER_READY, 0),
     },
-    bb
+    unsafeSyncWriter
   )
-  return bb.finish()
+  return unsafeSyncWriter.finish()
 }
 
 const transportStartMessageSerialized = getServerReadyMessage()
@@ -167,7 +170,7 @@ export async function handleCreatePort(
 
   await options.initializePort(port, transport)
 
-  const bb = new Writer()
+  unsafeSyncWriter.reset()
   CreatePortResponse.encode(
     {
       messageIdentifier: calculateMessageIdentifier(
@@ -176,9 +179,9 @@ export async function handleCreatePort(
       ),
       portId: port.portId,
     },
-    bb
+    unsafeSyncWriter
   )
-  transport.sendMessage(bb.finish())
+  transport.sendMessage(unsafeSyncWriter.finish())
 
   return port
 }
@@ -198,7 +201,7 @@ export async function handleRequestModule(
 
   const loadedModule = await port.loadModule(requestModule.moduleName)
 
-  const bb = new Writer()
+  unsafeSyncWriter.reset()
   RequestModuleResponse.encode(
     {
       procedures: loadedModule.procedures,
@@ -208,9 +211,9 @@ export async function handleRequestModule(
       ),
       portId: port.portId,
     },
-    bb
+    unsafeSyncWriter
   )
-  transport.sendMessage(bb.finish())
+  transport.sendMessage(unsafeSyncWriter.finish())
 }
 
 // @internal
@@ -238,7 +241,7 @@ export async function handleRequest(
   const port = getPortFromState(request.portId, transport, state)
 
   if (!port) {
-    const bb = new Writer()
+    unsafeSyncWriter.reset()
     RemoteError.encode(
       {
         messageIdentifier: calculateMessageIdentifier(
@@ -248,9 +251,9 @@ export async function handleRequest(
         errorCode: 0,
         errorMessage: "invalid portId",
       },
-      bb
+      unsafeSyncWriter
     )
-    transport.sendMessage(bb.finish())
+    transport.sendMessage(unsafeSyncWriter.finish())
     return
   }
 
@@ -262,9 +265,9 @@ export async function handleRequest(
 
   if (result instanceof Uint8Array) {
     response.payload = result
-    const bb = new Writer()
-    Response.encode(response, bb)
-    transport.sendMessage(bb.finish())
+    unsafeSyncWriter.reset()
+    Response.encode(response, unsafeSyncWriter)
+    transport.sendMessage(unsafeSyncWriter.finish())
   } else if (result && Symbol.asyncIterator in result) {
     const iter: AsyncGenerator<Uint8Array> = await (result as any)[Symbol.asyncIterator]()
     let sequenceNumber = -1
@@ -306,9 +309,9 @@ export async function handleRequest(
     }
     transport.sendMessage(closeStreamMessage(messageNumber, sequenceNumber, request.portId))
   } else {
-    const bb = new Writer()
-    Response.encode(response, bb)
-    transport.sendMessage(bb.finish())
+    unsafeSyncWriter.reset()
+    Response.encode(response, unsafeSyncWriter)
+    transport.sendMessage(unsafeSyncWriter.finish())
   }
 }
 
@@ -390,7 +393,7 @@ export function createRpcServer(options: CreateRpcServerOptions): RpcServer {
             try {
               await handleMessage(messageType, message, messageNumber, newTransport, ackHelper)
             } catch (err: any) {
-              const bb = new Writer()
+              unsafeSyncWriter.reset()
               RemoteError.encode(
                 {
                   messageIdentifier: calculateMessageIdentifier(
@@ -400,9 +403,9 @@ export function createRpcServer(options: CreateRpcServerOptions): RpcServer {
                   errorMessage: err.message || "Error processing the request",
                   errorCode: 0,
                 },
-                bb
+                unsafeSyncWriter
               )
-              newTransport.sendMessage(bb.finish())
+              newTransport.sendMessage(unsafeSyncWriter.finish())
             }
           } else {
             newTransport.emit("error", new Error(`Unknown message ${message}`))
