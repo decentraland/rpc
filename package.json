@@ -38,7 +38,6 @@
   ],
   "dependencies": {
     "mitt": "^3.0.0",
-    "pascalcase": "^2.0.0",
     "ts-proto": "^1.112.1"
   }
 }
