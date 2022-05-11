@@ -1,0 +1,16 @@
+make --dry-run --always-make --keep-going --print-directory
+make: Entering directory '/Users/user/code/rpc'
+ 
+# remove local folder
+rm -rf protoc3 || true
+# Make sure you grab the latest version
+curl -OL https://github.com/protocolbuffers/protobuf/releases/download/v3.19.1/protoc-3.19.1-osx-x86_64.zip
+# Unzip
+unzip protoc-3.19.1-osx-x86_64.zip -d protoc3
+# delete the files
+ 
+rm protoc-3.19.1-osx-x86_64.zip
+# move protoc to /usr/local/bin/
+chmod +x protoc3/bin/protoc
+make: Leaving directory '/Users/user/code/rpc'
+ 

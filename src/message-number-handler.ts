@@ -1,7 +1,7 @@
 import { Transport } from "."
-import { Writer,Reader } from "protobufjs"
+import { Writer,Reader } from "protobufjs/minimal"
 import { parseMessageIdentifier } from "./protocol/helpers"
-import { RpcMessageHeader } from "./protocol/pbjs"
+import { RpcMessageHeader } from "./protocol"
 let globalMessageNumber = 0
 
 export type SendableMessage = {

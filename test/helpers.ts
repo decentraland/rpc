@@ -3,7 +3,7 @@ import { log } from "./logger"
 import { inspect } from "util"
 import { MemoryTransport } from "../src/transports/Memory"
 import { parseProtocolMessage } from "../src/protocol/helpers"
-import { Reader } from "protobufjs"
+import { Reader } from "protobufjs/minimal"
 
 // async Array.from(generator*) with support for max elements
 export async function takeAsync<T>(iter: AsyncGenerator<T>, max?: number) {

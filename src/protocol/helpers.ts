@@ -1,4 +1,4 @@
-import { Writer, Reader } from "protobufjs"
+import { Writer, Reader } from "protobufjs/minimal"
 import {
   RpcMessageTypes,
   RpcMessageHeader,
@@ -11,7 +11,7 @@ import {
   CreatePort,
   RequestModule,
   DestroyPort,
-} from "./pbjs"
+} from "./index"
 
 export function closeStreamMessage(messageNumber: number, sequenceId: number, portId: number): Uint8Array {
   const bb = new Writer()

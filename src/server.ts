@@ -8,7 +8,7 @@ import {
   Transport,
 } from "./types"
 import mitt from "mitt"
-import { Writer, Reader } from "protobufjs"
+import { Writer, Reader } from "protobufjs/minimal"
 import { AsyncProcedureResultServer, RpcPortEvents, ServerModuleDeclaration } from "."
 import { AckDispatcher, createAckHelper } from "./ack-helper"
 import { calculateMessageIdentifier, closeStreamMessage, parseProtocolMessage } from "./protocol/helpers"
@@ -24,7 +24,7 @@ import {
   RpcMessageHeader,
   RpcMessageTypes,
   StreamMessage,
-} from "./protocol/pbjs"
+} from "./protocol"
 
 let lastPortId = 0
 
@@ -258,7 +258,7 @@ export async function handleRequest(
   }
 
   const result = await port.callProcedure(request.procedureId, request.payload)
-  const response = Response.create({
+  const response = Response.fromJSON({
     messageIdentifier: calculateMessageIdentifier(RpcMessageTypes.RpcMessageTypes_RESPONSE, messageNumber),
     payload: Uint8Array.from([]),
   })
@@ -272,7 +272,7 @@ export async function handleRequest(
     const iter: AsyncGenerator<Uint8Array> = await (result as any)[Symbol.asyncIterator]()
     let sequenceNumber = -1
 
-    const reusedStreamMessage: StreamMessage = StreamMessage.create({
+    const reusedStreamMessage: StreamMessage = StreamMessage.fromJSON({
       closed: false,
       ack: false,
       sequenceId: 0,

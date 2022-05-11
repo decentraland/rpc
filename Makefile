@@ -31,13 +31,12 @@ install_compiler:
 
 install: install_compiler
 	npm install
-	npm i -D ts-protoc-gen
-	npm i -S google-protobuf@$(PROTOBUF_VERSION)
-	npm i -S @types/google-protobuf@latest
 
 test:
-	${PROTOC} "--js_out=binary,import_style=commonjs_strict:$(PWD)/test/codegen" \
-		--ts_out="$(PWD)/test/codegen" \
+	${PROTOC} \
+		--plugin=./node_modules/.bin/protoc-gen-ts_proto \
+		--ts_proto_opt=esModuleInterop=true \
+		--ts_proto_out="$(PWD)/test/codegen" \
 		-I="$(PWD)/test/codegen" \
 		"$(PWD)/test/codegen/client.proto"
 	node_modules/.bin/jest --detectOpenHandles --colors --runInBand $(TESTARGS) --coverage $(TEST_FILE)
@@ -47,15 +46,14 @@ test-watch:
 
 build:
 	node_modules/.bin/ts-node scripts/generate-proto-file.ts
-	node_modules/.bin/pbjs -t static-module -w commonjs -o src/protocol/pbjs.js src/protocol/index.proto
-	node_modules/.bin/pbts -o src/protocol/pbjs.d.ts src/protocol/pbjs.js
 	@rm -rf dist || true
 	@mkdir -p dist
-	${PROTOC} "--js_out=binary,import_style=commonjs_strict:$(PWD)/src/protocol" \
-		--ts_out="$(PWD)/src/protocol" \
+	${PROTOC} \
+		--plugin=./node_modules/.bin/protoc-gen-ts_proto \
+		--ts_proto_opt=esModuleInterop=true \
+		--ts_proto_out="$(PWD)/src/protocol" \
 		-I="$(PWD)/src/protocol" \
 		"$(PWD)/src/protocol/index.proto"
-	@echo 'exports.default = proto;' >> ./src/protocol/index_pb.js
 	@cp -r src/protocol dist/protocol
 	./node_modules/.bin/tsc -p tsconfig.json
 	rm -rf node_modules/@microsoft/api-extractor/node_modules/typescript || true

@@ -1,6 +1,6 @@
 import { Suite } from "benchmark"
 import * as helpers from "./helpers"
-import { Book, GetBookRequest, QueryBooksRequest } from "./codegen/client_pb"
+import { Book, GetBookRequest, QueryBooksRequest } from "./codegen/client"
 import { RpcClientPort, RpcServerPort } from "../src"
 import {
   clientProcedureStream,
@@ -45,16 +45,16 @@ async function test() {
     async initializePort(port) {
       registerBookService(port, async () => ({
         async GetBook(req) {
-          if (req.getIsbn() == FAIL_WITH_EXCEPTION_ISBN) throw new Error("ErrorMessage")
+          if (req.isbn == FAIL_WITH_EXCEPTION_ISBN) throw new Error("ErrorMessage")
 
-          const book = new Book()
-          book.setAuthor("menduz")
-          book.setIsbn(req.getIsbn())
-          book.setTitle("Rpc onion layers")
-          return book
+          return {
+            author: "menduz",
+            isbn: req.isbn,
+            title: "Rpc onion layers",
+          }
         },
         async *QueryBooks(req) {
-          if (req.getAuthorPrefix() == "fail_before_yield") throw new Error("fail_before_yield")
+          if (req.authorPrefix == "fail_before_yield") throw new Error("fail_before_yield")
 
           const books = [
             { author: "mr menduz", isbn: 1234, title: "1001 reasons to write your own OS" },
@@ -64,16 +64,12 @@ async function test() {
           ]
 
           for (const book of books) {
-            if (book.author.includes(req.getAuthorPrefix())) {
-              const protoBook = new Book()
-              protoBook.setAuthor(book.author)
-              protoBook.setIsbn(book.isbn)
-              protoBook.setTitle(book.title)
-              yield protoBook
+            if (book.author.includes(req.authorPrefix)) {
+              yield book
             }
           }
 
-          if (req.getAuthorPrefix() == "fail_before_end") throw new Error("fail_before_end")
+          if (req.authorPrefix == "fail_before_end") throw new Error("fail_before_end")
         },
       }))
     },
@@ -83,19 +79,14 @@ async function test() {
   const clientPort = await rpcClient.createPort("test1")
   const service = loadBookService(clientPort)
 
-  const req1 = new GetBookRequest()
-  const req2 = new QueryBooksRequest()
-  req1.setIsbn(1234)
-  req2.setAuthorPrefix("mr")
-
   const suite = new Suite()
 
   suite
     .add("GetBook", {
       defer: true,
       async fn(deferred) {
-        const ret = await service.GetBook(req1)
-        if (ret.getIsbn() != 1234) deferred.reject(new Error("invalid number"))
+        const ret = await service.GetBook({ isbn: 1234 })
+        if (ret.isbn != 1234) deferred.reject(new Error("invalid number"))
         deferred.resolve()
       },
     })
@@ -104,7 +95,7 @@ async function test() {
       async fn(deferred) {
         const results = []
 
-        for await (const book of service.QueryBooks(req2)) {
+        for await (const book of service.QueryBooks({ authorPrefix: "mr" })) {
           results.push(book)
         }
 
@@ -112,11 +103,11 @@ async function test() {
         deferred.resolve()
       },
     })
-    .on("cycle", function(event) {
-      console.log(String(event.target));
+    .on("cycle", function (event) {
+      console.log(String(event.target))
     })
-    .on("complete", function() {
-      console.log("Fastest is " + this.filter("fastest").map("name"));
+    .on("complete", function () {
+      console.log("Fastest is " + this.filter("fastest").map("name"))
     })
     .run({ async: true })
 }

@@ -1,7 +1,7 @@
 import { CallableProcedureClient, ClientModuleDefinition, RpcClient, RpcClientPort, RpcPortEvents } from "."
 import { Transport } from "./types"
 import mitt from "mitt"
-import { Writer } from "protobufjs"
+import { Writer } from "protobufjs/minimal"
 import {
   CreatePort,
   CreatePortResponse,
@@ -13,7 +13,7 @@ import {
   Response,
   RpcMessageTypes,
   StreamMessage,
-} from "./protocol/pbjs"
+} from "./protocol"
 import { MessageDispatcher, messageNumberHandler } from "./message-number-handler"
 import { pushableChannel } from "./push-channel"
 import {

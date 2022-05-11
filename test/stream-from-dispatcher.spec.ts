@@ -1,10 +1,9 @@
 import { streamFromDispatcher } from "../src/client"
-import { Reader } from "protobufjs"
 import { messageNumberHandler } from "../src/message-number-handler"
 import { closeStreamMessage, streamMessage } from "../src/protocol/helpers"
 import { MemoryTransport } from "../src/transports/Memory"
 import { instrumentTransport, takeAsync } from "./helpers"
-import { StreamMessage } from "../src/protocol/pbjs"
+import { StreamMessage } from "../src/protocol"
 
 describe("streamFromDispatcher", () => {
   it("a CloseMessage from the server closes the iterator in the client", async () => {

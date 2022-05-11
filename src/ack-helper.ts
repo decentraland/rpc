@@ -1,7 +1,7 @@
-import { Writer } from "protobufjs"
+import { Writer } from "protobufjs/minimal"
 import { Transport } from "./types"
 import { parseMessageIdentifier } from "./protocol/helpers"
-import { StreamMessage } from "./protocol/pbjs"
+import { StreamMessage } from "./protocol"
 
 export type AckDispatcher = {
   sendWithAck(data: StreamMessage): Promise<StreamMessage>

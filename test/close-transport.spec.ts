@@ -1,6 +1,6 @@
 import { RpcClient } from "../src"
 import { calculateMessageIdentifier } from "../src/protocol/helpers"
-import { RpcMessageHeader, RpcMessageTypes } from "../src/protocol/pbjs"
+import { RpcMessageHeader, RpcMessageTypes } from "../src/protocol"
 import { createSimpleTestEnvironment } from "./helpers"
 
 async function testPort(rpcClient: RpcClient, portName: string) {
