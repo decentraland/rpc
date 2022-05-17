@@ -1,4 +1,4 @@
-import { createRpcClient, createRpcServer, CreateRpcServerOptions, RpcClient } from "../src"
+import { createRpcClient, createRpcServer, CreateRpcServerOptions, RpcClient, Transport } from "../src"
 import { log } from "./logger"
 import { inspect } from "util"
 import { MemoryTransport } from "../src/transports/Memory"
@@ -17,48 +17,38 @@ export async function takeAsync<T>(iter: AsyncGenerator<T>, max?: number) {
   return r
 }
 
-export function instrumentTransport(memoryTransport: ReturnType<typeof MemoryTransport>) {
+function serialize(data: Uint8Array) {
+  const ret = parseProtocolMessage(Reader.create(data))
+  if (!ret) return inspect(data)
+  return ret[1]
+}
+
+export function instrumentTransport(transport: Transport, name: string) {
+  if (typeof it == "function") {
+    transport.on("close", (data) => {
+      log(`  (${name}): closed`)
+    })
+    transport.on("error", (data) => {
+      log(`  (${name} error): ${data}`)
+    })
+    transport.on("message", (data) => {
+      try {
+        log(`  (message->${name}): ${JSON.stringify(serialize(data))}`)
+      } catch (err) {
+        console.error(err)
+      }
+    })
+  }
+}
+
+export function instrumentMemoryTransports(memoryTransport: ReturnType<typeof MemoryTransport>) {
   const { client, server } = memoryTransport
 
-  log("> Creating memory transport")
-
-  function serialize(data: Uint8Array) {
-    const ret = parseProtocolMessage(Reader.create(data))
-    if (!ret) return inspect(data)
-    return ret[1]
-  }
+  console.trace("> Creating memory transport")
 
   // only instrument while running tests
-  if (typeof it == "function") {
-    client.on("close", (data) => {
-      log("  (client): closed")
-    })
-    client.on("error", (data) => {
-      log("  (client error): " + data)
-    })
-    client.on("message", (data) => {
-      try {
-        log("  (wire server->client): " + JSON.stringify(serialize(data)))
-      } catch (err) {
-        console.error(err)
-      }
-    })
-
-    server.on("close", (data) => {
-      log("  (server): closed")
-    })
-    server.on("error", (data) => {
-      log("  (server error): " + data)
-    })
-
-    server.on("message", (data) => {
-      try {
-        log("  (wire client->server): " + JSON.stringify(serialize(data)))
-      } catch (err) {
-        console.error(err)
-      }
-    })
-  }
+  instrumentTransport(client, "client")
+  instrumentTransport(server, "server")
 
   return memoryTransport
 }
@@ -66,7 +56,7 @@ export function instrumentTransport(memoryTransport: ReturnType<typeof MemoryTra
 export function createSimpleTestEnvironment(options: CreateRpcServerOptions) {
   async function start() {
     const memoryTransport = MemoryTransport()
-    instrumentTransport(memoryTransport)
+    instrumentMemoryTransports(memoryTransport)
 
     const rpcServer = createRpcServer(options)
 

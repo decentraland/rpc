@@ -8,6 +8,8 @@ export interface IWebSocketEventMap {
   open: any
 }
 
+export const defer = Promise.prototype.then.bind(Promise.resolve())
+
 /**
  * This interface should be compatible with the Browsers interface
  * and npm ws package for servers
@@ -61,7 +63,13 @@ export function WebSocketTransport(socket: IWebSocket): Transport {
   const events = mitt<TransportEvents>()
 
   socket.addEventListener("close", () => events.emit("close", {}), { once: true })
-  socket.addEventListener("open", () => events.emit("connect", {}), { once: true })
+
+  if (socket.readyState == socket.OPEN) {
+    defer(() => events.emit("connect", {}))
+  } else {
+    socket.addEventListener("open", () => events.emit("connect", {}), { once: true })
+  }
+
   socket.addEventListener("error", (err: any) => {
     if (err.error) {
       events.emit("error", err.error)
@@ -79,13 +87,14 @@ export function WebSocketTransport(socket: IWebSocket): Transport {
     }
   })
   socket.addEventListener("message", (message: { data: any }) => {
-    if (message.data instanceof Uint8Array) {
-      events.emit("message", message.data)
+    if (message.data instanceof ArrayBuffer) {
+      events.emit("message", new Uint8Array(message.data))
     } else {
       debugger
       throw new Error(`WebSocketTransport: Received unknown type of message, expecting Uint8Array`)
     }
   })
+
 
   const api: Transport = {
     ...events,

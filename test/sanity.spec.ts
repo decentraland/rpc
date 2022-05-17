@@ -1,18 +1,37 @@
-import { RpcClient } from "../src"
+import { RpcClient, RpcServerPort } from "../src"
 import { log } from "./logger"
 import { createSimpleTestEnvironment } from "./helpers"
+export type BasicTestModule = {
+  basic(): Promise<Uint8Array>
+  getPortId(): Promise<Uint8Array>
+  returnEmpty(): Promise<void>
+  identity(data: Uint8Array): Promise<Uint8Array>
+}
 
-async function testPort(rpcClient: RpcClient, portName: string) {
-  log(`> Creating Port ${portName}`)
+export async function configureTestPortServer(port: RpcServerPort) {
+  log(`! Initializing port ${port.portId} ${port.portName}`)
+  port.registerModule(
+    "echo",
+    async (port): Promise<BasicTestModule> => ({
+      async returnEmpty() {},
+      async basic() {
+        return Uint8Array.from([0, 1, 2])
+      },
+      async getPortId() {
+        return Uint8Array.from([port.portId % 0xff])
+      },
+      async identity(test) {
+        return test
+      },
+    })
+  )
+}
+export async function testPort(rpcClient: RpcClient, portName: string) {
+  log(`> Creating client port ${portName}`)
   const port = await rpcClient.createPort(portName)
   log("> Loading module echo")
 
-  const module = (await port.loadModule("echo")) as {
-    basic(): Promise<Uint8Array>
-    getPortId(): Promise<Uint8Array>
-    returnEmpty(): Promise<void>
-    identity(data: Uint8Array): Promise<Uint8Array>
-  }
+  const module = (await port.loadModule("echo")) as BasicTestModule
 
   expect(module).toHaveProperty("basic")
   expect(module).toHaveProperty("getPortId")
@@ -35,19 +54,7 @@ async function testPort(rpcClient: RpcClient, portName: string) {
 describe("Helpers simple req/res", () => {
   const testEnv = createSimpleTestEnvironment({
     async initializePort(port) {
-      log(`! Initializing port ${port.portId} ${port.portName}`)
-      port.registerModule("echo", async (port) => ({
-        async returnEmpty() {},
-        async basic() {
-          return Uint8Array.from([0, 1, 2])
-        },
-        async getPortId() {
-          return Uint8Array.from([port.portId % 0xff])
-        },
-        async identity(test) {
-          return test
-        },
-      }))
+      await configureTestPortServer(port)
     },
   })
 

@@ -12,7 +12,6 @@ export function WebWorkerTransport(worker: IWorker): Transport {
   const events = mitt<TransportEvents>()
 
   worker.addEventListener("message", () => events.emit("connect", {}), { once: true })
-  worker.addEventListener("message", () => events.emit("connect", {}), { once: true })
   worker.addEventListener("error", (err: any) => {
     if (err.error) {
       events.emit("error", err.error)
@@ -31,7 +30,7 @@ export function WebWorkerTransport(worker: IWorker): Transport {
   })
 
   worker.addEventListener("message", (message: any) => {
-    if (message.data instanceof Uint8Array) {
+    if (message.data instanceof ArrayBuffer) {
       events.emit("message", message.data)
     } else {
       debugger
@@ -42,7 +41,7 @@ export function WebWorkerTransport(worker: IWorker): Transport {
   const api: Transport = {
     ...events,
     sendMessage(message) {
-      if (message instanceof Uint8Array) {
+      if (message instanceof ArrayBuffer) {
         worker.postMessage(message)
       } else {
         throw new Error(`WebWorkerTransport: Received unknown type of message, expecting Uint8Array`)

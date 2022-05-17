@@ -36,23 +36,5 @@ export function registerBookServiceServerImplementation(port: RpcServerPort) {
 
       if (req.authorPrefix == "fail_before_end") throw new Error("fail_before_end")
     },
-    async *queryBooksNoAck(req: QueryBooksRequest) {
-      if (req.authorPrefix == "fail_before_yield") throw new Error("fail_before_yield")
-
-      const books = [
-        { author: "mr menduz", isbn: 1234, title: "1001 reasons to write your own OS" },
-        { author: "mr cazala", isbn: 1111, title: "Advanced CSS" },
-        { author: "mr mannakia", isbn: 7666, title: "Advanced binary packing" },
-        { author: "mr kuruk", isbn: 7668, title: "Advanced bots AI" },
-      ]
-
-      for (const book of books) {
-        if (book.author.includes(req.authorPrefix)) {
-          yield book
-        }
-      }
-
-      if (req.authorPrefix == "fail_before_end") throw new Error("fail_before_end")
-    },
   }))
 }
