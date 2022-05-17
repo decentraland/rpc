@@ -1,26 +1,8 @@
-import { RpcClientPort } from "../src"
-import { clientProcedureStream, clientProcedureUnary } from "../src/codegen"
-import { Book, GetBookRequest, QueryBooksRequest } from "./codegen/client"
+import { loadService, RpcClient } from "../src/codegen"
+import { Book, BookServiceDefinition, GetBookRequest, QueryBooksRequest } from "./codegen/client"
 import { createSimpleTestEnvironment, takeAsync } from "./helpers"
 
-/// service BookService {
-export type BookService = {
-  ///   rpc GetBook(GetBookRequest) returns (Book) {}
-  GetBook(arg: GetBookRequest): Promise<Book>
-  ///   rpc QueryBooks(QueryBooksRequest) returns (stream Book) {}
-  QueryBooks(arg: QueryBooksRequest): AsyncGenerator<Book>
-}
-/// }
-
 const FAIL_WITH_EXCEPTION_ISBN = 1
-
-export function loadBookService(port: RpcClientPort): BookService {
-  const mod = port.loadModule("BookService")
-  return {
-    GetBook: clientProcedureUnary(mod, "GetBook", GetBookRequest, Book),
-    QueryBooks: clientProcedureStream(mod, "QueryBooks", QueryBooksRequest, Book),
-  }
-}
 
 describe("codegen client", () => {
   const testEnv = createSimpleTestEnvironment({
@@ -61,17 +43,17 @@ describe("codegen client", () => {
     },
   })
 
-  let service: BookService
+  let service: RpcClient<BookServiceDefinition>
 
   it("basic service wraper creation", async () => {
     const { rpcClient } = await testEnv.start()
 
     const clientPort = await rpcClient.createPort("test1")
-    service = loadBookService(clientPort)
+    service = loadService(clientPort, BookServiceDefinition)
   })
 
   it("calls an unary method", async () => {
-    const ret = await service.GetBook({ isbn: 1234 })
+    const ret = await service.getBook({ isbn: 1234 })
     expect(ret.isbn).toEqual(1234)
     expect(ret.author).toEqual("menduz")
   })
@@ -79,7 +61,7 @@ describe("codegen client", () => {
   it("calls a streaming method", async () => {
     const results: Book[] = []
 
-    for await (const book of service.QueryBooks({ authorPrefix: "mr" })) {
+    for await (const book of service.queryBooks({ authorPrefix: "mr" })) {
       expect(book.author).toMatch(/^mr\s.+/)
       results.push(book)
     }
@@ -88,17 +70,17 @@ describe("codegen client", () => {
   })
 
   it("calls to unary fails throws error in client", async () => {
-    await expect(service.GetBook({ isbn: FAIL_WITH_EXCEPTION_ISBN })).rejects.toThrowError("RemoteError: ErrorMessage")
+    await expect(service.getBook({ isbn: FAIL_WITH_EXCEPTION_ISBN })).rejects.toThrowError("RemoteError: ErrorMessage")
   })
 
   it("calls to streaming fails throws error in client, fail_before_yield", async () => {
-    await expect(service.QueryBooks({ authorPrefix: "fail_before_yield" }).next()).rejects.toThrowError(
+    await expect(service.queryBooks({ authorPrefix: "fail_before_yield" }).next()).rejects.toThrowError(
       "RemoteError: fail_before_yield"
     )
   })
 
   it("calls to streaming fails throws error in client, fail_before_end", async () => {
-    await expect(() => takeAsync(service.QueryBooks({ authorPrefix: "fail_before_end" }))).rejects.toThrowError(
+    await expect(() => takeAsync(service.queryBooks({ authorPrefix: "fail_before_end" }))).rejects.toThrowError(
       "RemoteError: fail_before_end"
     )
   })

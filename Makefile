@@ -35,11 +35,12 @@ install: install_compiler
 test:
 	${PROTOC} \
 		--plugin=./node_modules/.bin/protoc-gen-ts_proto \
-		--ts_proto_opt=esModuleInterop=true \
+		--ts_proto_opt=esModuleInterop=true,returnObservable=false,outputServices=generic-definitions \
 		--ts_proto_out="$(PWD)/test/codegen" \
 		-I="$(PWD)/test/codegen" \
 		"$(PWD)/test/codegen/client.proto"
 	node_modules/.bin/jest --detectOpenHandles --colors --runInBand $(TESTARGS) --coverage $(TEST_FILE)
+	$(MAKE) integration-example
 
 test-watch:
 	node_modules/.bin/jest --detectOpenHandles --colors --runInBand --watch $(TESTARGS) --coverage
@@ -62,4 +63,8 @@ build:
 cheap-perf:
 	@time node_modules/.bin/ts-node test/bench.ts
 
-.PHONY: build test cheap-perf
+integration-example:
+	@cd example; ./build.sh
+	@TS_NODE_PROJECT="example/tsconfig.json" node_modules/.bin/ts-node ./example/integration.ts
+
+.PHONY: build test cheap-perf integration-example
