@@ -66,7 +66,6 @@ export function instrumentTransport(memoryTransport: ReturnType<typeof MemoryTra
 export function createSimpleTestEnvironment(options: CreateRpcServerOptions) {
   async function start() {
     const memoryTransport = MemoryTransport()
-    let rpcClient: RpcClient
     instrumentTransport(memoryTransport)
 
     const rpcServer = createRpcServer(options)
@@ -83,7 +82,7 @@ export function createSimpleTestEnvironment(options: CreateRpcServerOptions) {
     if (serverClosed) throw new Error("This server is already closed. Use a new testing environment")
     log("> Creating RPC Client")
     setImmediate(() => rpcServer.attachTransport(memoryTransport.server))
-    rpcClient = await createRpcClient(memoryTransport.client)
+    const rpcClient = await createRpcClient(memoryTransport.client)
     clientClosed = false
 
     return { rpcClient, rpcServer, transportClient: memoryTransport.client, transportServer: memoryTransport.server }

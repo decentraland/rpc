@@ -17,5 +17,4 @@ message QueryBooksRequest {
 service BookService {
   rpc GetBook(GetBookRequest) returns (Book) {}
   rpc QueryBooks(QueryBooksRequest) returns (stream Book) {}
-  rpc QueryBooksNoAck(QueryBooksRequest) returns (stream Book) {}
 }

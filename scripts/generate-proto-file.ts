@@ -12,7 +12,7 @@ proto.addMessage("RpcMessageHeader", [
   // message_identifier packs two numbers the
   //   bits 32..28 correspond to the message_type
   //   bits 28..1  correspond to the secuential message number, analogous to JSON-RPC 2
-  field("fixed32", "message_identifier", 1),
+  field("fixed32", "message_identifier", 1, false),
 ])
 
 const PORT_ID = field("fixed32", "port_id", 2)

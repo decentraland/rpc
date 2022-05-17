@@ -2,7 +2,7 @@ export type ProtoField = {
   number: number
   name: string
   type: string
-  repeated?: boolean
+  repeated: boolean
 }
 
 export type ProtoMessage = {
@@ -21,7 +21,7 @@ export function field(type: string, name: string, number: number, repeated?: boo
     type,
     name,
     number,
-    repeated: repeated || false
+    repeated: repeated || false,
   }
 }
 
