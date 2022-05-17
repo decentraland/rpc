@@ -30,7 +30,9 @@ export function createPort(portId: number, portName: string, dispatcher: Message
   const events = mitt<RpcPortEvents>()
 
   let state: "open" | "closed" = "open"
-  events.on("close", () => (state = "closed"))
+  events.on("close", () => {
+    state = "closed"
+  })
 
   return {
     ...events,
@@ -261,6 +263,10 @@ export async function createRpcClient(transport: Transport): Promise<RpcClient> 
       clientPortByName.set(portName, portFuture)
 
       const port = await portFuture
+
+      transport.on('close', () => {
+        port.close()
+      })
 
       port.on("close", () => {
         if (clientPortByName.get(portName) === portFuture) {
