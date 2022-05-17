@@ -1,4 +1,4 @@
-import { loadService, RpcClient } from "../src/codegen"
+import { loadService, RpcClientModule } from "../src/codegen"
 import { Book, BookServiceDefinition, GetBookRequest, QueryBooksRequest } from "./codegen/client"
 import { createSimpleTestEnvironment, takeAsync } from "./helpers"
 
@@ -43,7 +43,7 @@ describe("codegen client", () => {
     },
   })
 
-  let service: RpcClient<BookServiceDefinition>
+  let service: RpcClientModule<BookServiceDefinition>
 
   it("basic service wraper creation", async () => {
     const { rpcClient } = await testEnv.start()

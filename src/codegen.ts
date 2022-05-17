@@ -81,12 +81,12 @@ export function serverProcedureStream<Request, Response>(
   }
 }
 
-export type RpcClient<Service extends TsProtoServiceDefinition, CallContext = {}> = RawClient<
+export type RpcClientModule<Service extends TsProtoServiceDefinition, CallContext = {}> = RawClient<
   FromTsProtoServiceDefinition<Service>,
   CallContext
 >
 
-export type RpcServer<Service extends TsProtoServiceDefinition, CallContext = {}> = RawServiceImplementation<
+export type RpcServerModule<Service extends TsProtoServiceDefinition, CallContext = {}> = RawServiceImplementation<
   FromTsProtoServiceDefinition<Service>,
   CallContext
 >
@@ -94,7 +94,7 @@ export type RpcServer<Service extends TsProtoServiceDefinition, CallContext = {}
 export function loadService<Service extends TsProtoServiceDefinition>(
   port: RpcClientPort,
   service: Service
-): RpcClient<Service, CallContext> {
+): RpcClientModule<Service, CallContext> {
   const portFuture = port.loadModule(service.name)
   const ret: RawClient<any, CallContext> = {} as any
   for (const [key, def] of Object.entries(service.methods)) {
@@ -111,7 +111,7 @@ export function loadService<Service extends TsProtoServiceDefinition>(
 export function registerService<Service extends TsProtoServiceDefinition>(
   port: RpcServerPort,
   service: Service,
-  moduleInitializator: (port: RpcServerPort) => Promise<RpcServer<Service>>
+  moduleInitializator: (port: RpcServerPort) => Promise<RpcServerModule<Service>>
 ) {
   port.registerModule(service.name, async (port) => {
     const mod = await moduleInitializator(port)

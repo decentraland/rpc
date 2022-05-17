@@ -58,7 +58,7 @@ describe("codegen client & server", () => {
     },
   })
 
-  let service: codegen.RpcClient<BookServiceDefinition>
+  let service: codegen.RpcClientModule<BookServiceDefinition>
 
   it("basic service wraper creation", async () => {
     const { rpcClient } = await testEnv.start()
