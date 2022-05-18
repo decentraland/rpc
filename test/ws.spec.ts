@@ -9,7 +9,7 @@ describe("WebSocket test simple", () => {
   let sv: WebSocketServer
 
   let server: RpcServer
-  let serverPort: RpcServerPort
+  let serverPort: RpcServerPort<any>
 
   it("creates a server", () => {
     server = createRpcServer({
@@ -65,7 +65,7 @@ describe("WebSocket test close server", () => {
   let sv: WebSocketServer
 
   let server: RpcServer
-  let serverPort: RpcServerPort
+  let serverPort: RpcServerPort<any>
 
   it("creates a server", () => {
     server = createRpcServer({
@@ -118,9 +118,10 @@ describe("WebSocket test close server", () => {
 })
 
 describe("Closing the serverTransport closes the WebSocket connection", () => {
+  type Context = { hello: string }
   let sv: WebSocketServer
-  let server: RpcServer
-  let serverPort: RpcServerPort
+  let server: RpcServer<Context>
+  let serverPort: RpcServerPort<Context>
   let serverTransport: Transport
 
   it("creates a server", () => {

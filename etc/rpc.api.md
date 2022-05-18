@@ -16,7 +16,7 @@ export type AsyncProcedureResultServer = Promise<Uint8Array | void> | AsyncGener
 export type CallableProcedureClient = (payload: Uint8Array) => AsyncProcedureResultClient;
 
 // @public (undocumented)
-export type CallableProcedureServer = (payload: Uint8Array) => AsyncProcedureResultServer;
+export type CallableProcedureServer<Context> = (payload: Uint8Array, context: Context) => AsyncProcedureResultServer;
 
 // @public (undocumented)
 export type ClientModuleDefinition = Record<string, CallableProcedureClient>;
@@ -25,15 +25,15 @@ export type ClientModuleDefinition = Record<string, CallableProcedureClient>;
 export function createRpcClient(transport: Transport): Promise<RpcClient>;
 
 // @public (undocumented)
-export function createRpcServer(options: CreateRpcServerOptions): RpcServer;
+export function createRpcServer<Context = {}>(options: CreateRpcServerOptions<Context>): RpcServer<Context>;
 
 // @public (undocumented)
-export type CreateRpcServerOptions = {
-    initializePort: (serverPort: RpcServerPort, transport: Transport) => Promise<void>;
+export type CreateRpcServerOptions<Context> = {
+    initializePort: (serverPort: RpcServerPort<Context>, transport: Transport) => Promise<void>;
 };
 
 // @public (undocumented)
-export type ModuleGeneratorFunction = (port: RpcServerPort) => Promise<ServerModuleDefinition>;
+export type ModuleGeneratorFunction<Context> = (port: RpcServerPort<Context>) => Promise<ServerModuleDefinition<Context>>;
 
 // @public (undocumented)
 export type RpcClient = {
@@ -55,17 +55,18 @@ export type RpcPortEvents = {
 };
 
 // @public
-export type RpcServer = Pick<Emitter<RpcServerEvents>, "on" | "emit"> & {
+export type RpcServer<Context = {}> = Pick<Emitter<RpcServerEvents>, "on" | "emit"> & {
     attachTransport(transport: Transport): void;
+    setContext(ctx: Context): void;
 };
 
 // @public (undocumented)
 export type RpcServerEvents = {
     portCreated: {
-        port: RpcServerPort;
+        port: RpcServerPort<any>;
     };
     portClosed: {
-        port: RpcServerPort;
+        port: RpcServerPort<any>;
     };
     transportClosed: {
         transport: Transport;
@@ -77,12 +78,12 @@ export type RpcServerEvents = {
 };
 
 // @public (undocumented)
-export type RpcServerPort = Pick<Emitter<RpcPortEvents>, "on" | "emit"> & {
+export type RpcServerPort<Context> = Pick<Emitter<RpcPortEvents>, "on" | "emit"> & {
     readonly portId: number;
     readonly portName: string;
-    registerModule(moduleName: string, moduleDefinition: ModuleGeneratorFunction): void;
-    loadModule(moduleName: string): Promise<ServerModuleDeclaration>;
-    callProcedure(procedureId: number, argument: Uint8Array): AsyncProcedureResultServer;
+    registerModule(moduleName: string, moduleDefinition: ModuleGeneratorFunction<Context>): void;
+    loadModule(moduleName: string): Promise<ServerModuleDeclaration<any>>;
+    callProcedure(procedureId: number, argument: Uint8Array, context: Context): AsyncProcedureResultServer;
     close(): void;
 };
 
@@ -93,18 +94,18 @@ export type SendableMessage = {
 };
 
 // @public (undocumented)
-export type ServerModuleDeclaration = {
-    procedures: ServerModuleProcedure[];
+export type ServerModuleDeclaration<Context> = {
+    procedures: ServerModuleProcedure<Context>[];
 };
 
 // @public (undocumented)
-export type ServerModuleDefinition = Record<string, CallableProcedureServer>;
+export type ServerModuleDefinition<Context> = Record<string, CallableProcedureServer<Context>>;
 
 // @public (undocumented)
-export type ServerModuleProcedure = {
+export type ServerModuleProcedure<Context> = {
     procedureName: string;
     procedureId: number;
-    callable: CallableProcedureServer;
+    callable: CallableProcedureServer<Context>;
 };
 
 // @public (undocumented)

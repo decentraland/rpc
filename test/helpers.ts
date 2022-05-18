@@ -53,8 +53,8 @@ export function instrumentMemoryTransports(memoryTransport: ReturnType<typeof Me
   return memoryTransport
 }
 
-export function createSimpleTestEnvironment(options: CreateRpcServerOptions) {
-  async function start() {
+export function createSimpleTestEnvironment<Context = void>(options: CreateRpcServerOptions<Context>) {
+  async function start(context: Context) {
     const memoryTransport = MemoryTransport()
     instrumentMemoryTransports(memoryTransport)
 

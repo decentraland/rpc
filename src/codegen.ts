@@ -1,5 +1,4 @@
 import {
-  CallContext,
   FromTsProtoServiceDefinition,
   RawClient,
   TsProtoMethodDefinition,
@@ -52,26 +51,26 @@ export function clientProcedureStream<Request, Response>(
   return fn
 }
 
-export function serverProcedureUnary<Request, Response>(
-  fn: (arg: Request, context?: any) => Promise<Response>,
+export function serverProcedureUnary<Request, Response, Context>(
+  fn: (arg: Request, context: Context) => Promise<Response>,
   method: TsProtoMethodDefinition<Request, Response>
-): (arg: Uint8Array) => Promise<Uint8Array> {
-  return async function (argBinary) {
+): (arg: Uint8Array, context: Context) => Promise<Uint8Array> {
+  return async function (argBinary, context) {
     const arg = method.requestType.decode(argBinary)
-    const result = await fn(arg)
+    const result = await fn(arg, context)
 
     if (!result) throw new Error("Empty or null responses are not allowed. Procedure: " + method.name)
     return method.responseType.encode(result).finish()
   }
 }
 
-export function serverProcedureStream<Request, Response>(
-  fn: (arg: Request, context?: any) => Promise<AsyncGenerator<Response>> | AsyncGenerator<Response>,
+export function serverProcedureStream<Request, Response, Context>(
+  fn: (arg: Request, context: Context) => Promise<AsyncGenerator<Response>> | AsyncGenerator<Response>,
   method: TsProtoMethodDefinition<Request, Response>
-): (arg: Uint8Array) => AsyncGenerator<Uint8Array> {
-  return async function* (argBinary) {
+): (arg: Uint8Array, context: Context) => AsyncGenerator<Uint8Array> {
+  return async function* (argBinary, ctx) {
     const arg = method.requestType.decode(argBinary)
-    const result = await fn(arg)
+    const result = await fn(arg, ctx)
 
     if (!result) throw new Error("Empty or null responses are not allowed. Procedure: " + method.name)
 
@@ -91,7 +90,7 @@ export type RpcServerModule<Service extends TsProtoServiceDefinition, CallContex
   CallContext
 >
 
-export function loadService<Service extends TsProtoServiceDefinition>(
+export function loadService<CallContext = {}, Service extends TsProtoServiceDefinition = any>(
   port: RpcClientPort,
   service: Service
 ): RpcClientModule<Service, CallContext> {
@@ -108,10 +107,10 @@ export function loadService<Service extends TsProtoServiceDefinition>(
   return ret
 }
 
-export function registerService<Service extends TsProtoServiceDefinition>(
-  port: RpcServerPort,
+export function registerService<CallContext = {}, Service extends TsProtoServiceDefinition = any>(
+  port: RpcServerPort<CallContext>,
   service: Service,
-  moduleInitializator: (port: RpcServerPort) => Promise<RpcServerModule<Service>>
+  moduleInitializator: (port: RpcServerPort<CallContext>) => Promise<RpcServerModule<Service, CallContext>>
 ) {
   port.registerModule(service.name, async (port) => {
     const mod = await moduleInitializator(port)
