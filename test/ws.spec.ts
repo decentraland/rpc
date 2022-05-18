@@ -8,15 +8,14 @@ import { configureTestPortServer, testPort } from "./sanity.spec"
 describe("WebSocket test simple", () => {
   let sv: WebSocketServer
 
-  let server: RpcServer
-  let serverPort: RpcServerPort<any>
+  let server: RpcServer<void>
+  let serverPort: RpcServerPort<void>
 
   it("creates a server", () => {
-    server = createRpcServer({
-      async initializePort(port) {
-        serverPort = port
-        await configureTestPortServer(port)
-      },
+    server = createRpcServer<void>({})
+    server.setHandler(async function (port) {
+      serverPort = port
+      await configureTestPortServer(port)
     })
   })
 
@@ -64,15 +63,14 @@ describe("WebSocket test simple", () => {
 describe("WebSocket test close server", () => {
   let sv: WebSocketServer
 
-  let server: RpcServer
+  let server: RpcServer<void>
   let serverPort: RpcServerPort<any>
 
   it("creates a server", () => {
-    server = createRpcServer({
-      async initializePort(port) {
-        serverPort = port
-        await configureTestPortServer(port)
-      },
+    server = createRpcServer({})
+    server.setHandler(async function (port) {
+      serverPort = port
+      await configureTestPortServer(port)
     })
   })
 
@@ -119,18 +117,19 @@ describe("WebSocket test close server", () => {
 
 describe("Closing the serverTransport closes the WebSocket connection", () => {
   type Context = { hello: string }
+  const leContext: Context = { hello: "asd" }
   let sv: WebSocketServer
   let server: RpcServer<Context>
   let serverPort: RpcServerPort<Context>
   let serverTransport: Transport
 
   it("creates a server", () => {
-    server = createRpcServer({
-      async initializePort(port, t) {
-        serverPort = port
-        serverTransport = t
-        await configureTestPortServer(port)
-      },
+    server = createRpcServer({})
+    server.setHandler(async (port, t, ctx) => {
+      serverPort = port
+      serverTransport = t
+      expect(ctx).toEqual(leContext)
+      await configureTestPortServer(port)
     })
   })
 
@@ -146,7 +145,7 @@ describe("Closing the serverTransport closes the WebSocket connection", () => {
       log("Got server connection:")
       const serverTransport = WebSocketTransport(ws)
       instrumentTransport(serverTransport, "serverTransport")
-      server.attachTransport(serverTransport)
+      server.attachTransport(serverTransport, leContext)
     })
   })
 

@@ -5,6 +5,7 @@
 ```ts
 
 import { Emitter } from 'mitt';
+import { ILoggerComponent } from '@well-known-components/interfaces';
 
 // @public (undocumented)
 export type AsyncProcedureResultClient = Promise<Uint8Array | AsyncGenerator<Uint8Array> | void>;
@@ -29,7 +30,7 @@ export function createRpcServer<Context = {}>(options: CreateRpcServerOptions<Co
 
 // @public (undocumented)
 export type CreateRpcServerOptions<Context> = {
-    initializePort: (serverPort: RpcServerPort<Context>, transport: Transport) => Promise<void>;
+    logger?: ILoggerComponent.ILogger;
 };
 
 // @public (undocumented)
@@ -56,8 +57,8 @@ export type RpcPortEvents = {
 
 // @public
 export type RpcServer<Context = {}> = Pick<Emitter<RpcServerEvents>, "on" | "emit"> & {
-    attachTransport(transport: Transport): void;
-    setContext(ctx: Context): void;
+    attachTransport(transport: Transport, context: Context): void;
+    setHandler(handler: RpcServerHandler<Context>): void;
 };
 
 // @public (undocumented)
@@ -76,6 +77,9 @@ export type RpcServerEvents = {
         error: Error;
     };
 };
+
+// @public (undocumented)
+export type RpcServerHandler<Context> = (serverPort: RpcServerPort<Context>, transport: Transport, context: Context) => Promise<void>;
 
 // @public (undocumented)
 export type RpcServerPort<Context> = Pick<Emitter<RpcPortEvents>, "on" | "emit"> & {

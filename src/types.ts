@@ -157,6 +157,15 @@ export type RpcServerEvents = {
  * @public
  */
 export type RpcServer<Context = {}> = Pick<Emitter<RpcServerEvents>, "on" | "emit"> & {
-  attachTransport(transport: Transport): void
-  setContext(ctx: Context): void
+  attachTransport(transport: Transport, context: Context): void
+  setHandler(handler: RpcServerHandler<Context>): void
 }
+
+/**
+ * @public
+ */
+export type RpcServerHandler<Context> = (
+  serverPort: RpcServerPort<Context>,
+  transport: Transport,
+  context: Context
+) => Promise<void>

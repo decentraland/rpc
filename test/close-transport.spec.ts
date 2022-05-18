@@ -12,21 +12,19 @@ async function testPort(rpcClient: RpcClient, portName: string) {
 
 describe("Close transport closes streams (server side)", () => {
   let infiniteStreamClosed = false
-  const testEnv = createSimpleTestEnvironment({
-    async initializePort(port) {
-      port.registerModule("echo", async (port) => ({
-        async *infinite() {
-          try {
-            infiniteStreamClosed = false
-            while (true) {
-              yield Uint8Array.from([1])
-            }
-          } finally {
-            infiniteStreamClosed = true
+  const testEnv = createSimpleTestEnvironment(async function (port) {
+    port.registerModule("echo", async (port) => ({
+      async *infinite() {
+        try {
+          infiniteStreamClosed = false
+          while (true) {
+            yield Uint8Array.from([1])
           }
-        },
-      }))
-    },
+        } finally {
+          infiniteStreamClosed = true
+        }
+      },
+    }))
   })
 
   it("creates the server", async () => {
@@ -52,21 +50,19 @@ describe("Close transport closes streams (server side)", () => {
 
 describe("Error in transport finalizes streams", () => {
   let infiniteStreamClosed = false
-  const testEnv = createSimpleTestEnvironment({
-    async initializePort(port) {
-      port.registerModule("echo", async (port) => ({
-        async *infinite() {
-          try {
-            infiniteStreamClosed = false
-            while (true) {
-              yield Uint8Array.from([1])
-            }
-          } finally {
-            infiniteStreamClosed = true
+  const testEnv = createSimpleTestEnvironment(async function (port) {
+    port.registerModule("echo", async (port) => ({
+      async *infinite() {
+        try {
+          infiniteStreamClosed = false
+          while (true) {
+            yield Uint8Array.from([1])
           }
-        },
-      }))
-    },
+        } finally {
+          infiniteStreamClosed = true
+        }
+      },
+    }))
   })
 
   it("creates the server", async () => {
@@ -92,21 +88,19 @@ describe("Error in transport finalizes streams", () => {
 
 describe("Close transport closes streams (client side)", () => {
   let infiniteStreamClosed = 0
-  const testEnv = createSimpleTestEnvironment({
-    async initializePort(port) {
-      port.registerModule("echo", async (port) => ({
-        async *infinite() {
-          try {
-            infiniteStreamClosed = 1
-            while (true) {
-              yield Uint8Array.from([1])
-            }
-          } finally {
-            infiniteStreamClosed = 2
+  const testEnv = createSimpleTestEnvironment(async function (port) {
+    port.registerModule("echo", async (port) => ({
+      async *infinite() {
+        try {
+          infiniteStreamClosed = 1
+          while (true) {
+            yield Uint8Array.from([1])
           }
-        },
-      }))
-    },
+        } finally {
+          infiniteStreamClosed = 2
+        }
+      },
+    }))
   })
 
   it("creates the server", async () => {
@@ -133,21 +127,19 @@ describe("Close transport closes streams (client side)", () => {
 
 describe("Error in transport closes the transport", () => {
   let infiniteStreamClosed = false
-  const testEnv = createSimpleTestEnvironment({
-    async initializePort(port) {
-      port.registerModule("echo", async (port) => ({
-        async *infinite() {
-          try {
-            infiniteStreamClosed = false
-            while (true) {
-              yield Uint8Array.from([1])
-            }
-          } finally {
-            infiniteStreamClosed = true
+  const testEnv = createSimpleTestEnvironment(async function (port) {
+    port.registerModule("echo", async (port) => ({
+      async *infinite() {
+        try {
+          infiniteStreamClosed = false
+          while (true) {
+            yield Uint8Array.from([1])
           }
-        },
-      }))
-    },
+        } finally {
+          infiniteStreamClosed = true
+        }
+      },
+    }))
   })
 
   it("creates the server", async () => {
@@ -172,14 +164,12 @@ describe("Error in transport closes the transport", () => {
 })
 
 async function setupForFailures() {
-  const testEnv = createSimpleTestEnvironment({
-    async initializePort(port) {
-      port.registerModule("echo", async () => ({
-        async infinite() {
-          return Uint8Array.from([2])
-        },
-      }))
-    },
+  const testEnv = createSimpleTestEnvironment(async function (port) {
+    port.registerModule("echo", async () => ({
+      async infinite() {
+        return Uint8Array.from([2])
+      },
+    }))
   })
 
   const { rpcClient, rpcServer, transportServer } = await testEnv.start()

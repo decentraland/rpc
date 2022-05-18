@@ -3,6 +3,7 @@ import {
   ModuleGeneratorFunction,
   RpcServer,
   RpcServerEvents,
+  RpcServerHandler,
   RpcServerPort,
   ServerModuleDefinition,
   Transport,
@@ -25,6 +26,7 @@ import {
   RpcMessageTypes,
   StreamMessage,
 } from "./protocol"
+import { ILoggerComponent } from "@well-known-components/interfaces"
 
 let lastPortId = 0
 
@@ -38,7 +40,7 @@ type RpcServerState = {
  * @public
  */
 export type CreateRpcServerOptions<Context> = {
-  initializePort: (serverPort: RpcServerPort<Context>, transport: Transport) => Promise<void>
+  logger?: ILoggerComponent.ILogger
 }
 
 // only use this writer in synchronous operations. It exists to prevent allocations
@@ -157,7 +159,9 @@ export async function handleCreatePort<Context>(
   createPortMessage: CreatePort,
   messageNumber: number,
   options: CreateRpcServerOptions<Context>,
-  state: RpcServerState
+  handler: RpcServerHandler<Context>,
+  state: RpcServerState,
+  context: Context
 ) {
   lastPortId++
 
@@ -168,7 +172,7 @@ export async function handleCreatePort<Context>(
   state.ports.set(port.portId, port)
   state.portsByTransport.set(transport, byTransport)
 
-  await options.initializePort(port, transport)
+  await handler(port, transport, context)
 
   unsafeSyncWriter.reset()
   CreatePortResponse.encode(
@@ -351,6 +355,8 @@ export function createRpcServer<Context = {}>(options: CreateRpcServerOptions<Co
     removeTransport(transport)
   }
 
+  let handler: RpcServerHandler<Context>
+
   async function handleMessage(
     messageType: number,
     parsedMessage: any,
@@ -364,7 +370,7 @@ export function createRpcServer<Context = {}>(options: CreateRpcServerOptions<Co
     } else if (messageType == RpcMessageTypes.RpcMessageTypes_REQUEST_MODULE) {
       await handleRequestModule(transport, parsedMessage, messageNumber, state)
     } else if (messageType == RpcMessageTypes.RpcMessageTypes_CREATE_PORT) {
-      const port = await handleCreatePort(transport, parsedMessage, messageNumber, options, state)
+      const port = await handleCreatePort(transport, parsedMessage, messageNumber, options, handler, state, context)
       port.on("close", () => events.emit("portClosed", { port }))
     } else if (messageType == RpcMessageTypes.RpcMessageTypes_DESTROY_PORT) {
       await handleDestroyPort(transport, parsedMessage, messageNumber, state)
@@ -380,13 +386,15 @@ export function createRpcServer<Context = {}>(options: CreateRpcServerOptions<Co
       )
     }
   }
-  let _context: Context | null = null
   return {
     ...events,
-    setContext(context: Context) {
-      _context = context
+    setHandler(_handler) {
+      handler = _handler
     },
-    attachTransport(newTransport: Transport) {
+    attachTransport(newTransport: Transport, context: Context) {
+      if (!handler) {
+        throw new Error("A handler was not set for this RpcServer")
+      }
       state.transports.add(newTransport)
       const ackHelper = createAckHelper(newTransport)
       newTransport.on("message", async (message) => {
@@ -396,8 +404,13 @@ export function createRpcServer<Context = {}>(options: CreateRpcServerOptions<Co
           if (parsedMessage) {
             const [messageType, message, messageNumber] = parsedMessage
             try {
-              await handleMessage(messageType, message, messageNumber, newTransport, ackHelper, _context!)
+              await handleMessage(messageType, message, messageNumber, newTransport, ackHelper, context!)
             } catch (err: any) {
+              options.logger?.error("Error handling remote request", {
+                message: err.message,
+                name: err.name,
+                stack: err.stack as any,
+              })
               unsafeSyncWriter.reset()
               RemoteError.encode(
                 {
@@ -413,7 +426,7 @@ export function createRpcServer<Context = {}>(options: CreateRpcServerOptions<Co
               newTransport.sendMessage(unsafeSyncWriter.finish())
             }
           } else {
-            newTransport.emit("error", new Error(`Unknown message ${message}`))
+            newTransport.emit("error", new Error(`Transport received unknown message: ${message}`))
           }
         } catch (err: any) {
           newTransport.emit("error", err)
@@ -425,6 +438,11 @@ export function createRpcServer<Context = {}>(options: CreateRpcServerOptions<Co
       })
 
       newTransport.on("error", (error) => {
+        options.logger?.error("Error in transport", {
+          message: error.message,
+          name: error.name,
+          stack: error.stack as any,
+        })
         handleTransportError(newTransport, error)
       })
 

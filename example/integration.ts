@@ -19,17 +19,14 @@ const context: TestContext = {
 }
 
 console.log("> Creating server")
-const rpcServer = createRpcServer<TestContext>({
-  // the initializePort function will be called every time a port is created.
-  // it should register the available APIs/Modules for the specified port
-  async initializePort(port) {
-    console.log("  Creating server port: " + port.portName)
-    // 2nd.1 step: we register the API for the new port
-    registerBookServiceServerImplementation(port)
-  },
+const rpcServer = createRpcServer<TestContext>({})
+// the handler function will be called every time a port is created.
+// it should register the available APIs/Modules for the specified port
+rpcServer.setHandler(async function handler(port) {
+  console.log("  Creating server port: " + port.portName)
+  // 2nd.1 step: we register the API for the new port
+  registerBookServiceServerImplementation(port)
 })
-// set the context to be passed on the final handlers
-rpcServer.setContext(context)
 
 // 3rd step: create a transport pair. In this case we will use a in-memory transport
 //           which creates two mutually connected virtual sockets
@@ -43,7 +40,7 @@ const clientPromise = createRpcClient(clientSocket)
 
 // 5th step: connect the "socket" to the server
 console.log("> Attaching transport")
-rpcServer.attachTransport(serverSocket)
+rpcServer.attachTransport(serverSocket, context)
 
 import { createBookServiceClient } from "./client"
 import expect from "expect"

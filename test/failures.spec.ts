@@ -8,19 +8,17 @@ async function testPort(rpcClient: RpcClient, moduleName: string) {
   }
 }
 
-const testEnv = createSimpleTestEnvironment({
-  async initializePort(port) {
-    port.registerModule("fails", async (port) => {
-      throw new Error("Access denied")
-    })
-    port.registerModule("works", async (port) => {
-      return {
-        async basic() {
-          return Uint8Array.from([1])
-        },
-      }
-    })
-  },
+const testEnv = createSimpleTestEnvironment(async function (port) {
+  port.registerModule("fails", async (port) => {
+    throw new Error("Access denied")
+  })
+  port.registerModule("works", async (port) => {
+    return {
+      async basic() {
+        return Uint8Array.from([1])
+      },
+    }
+  })
 })
 
 describe("Fails creating port", () => {
