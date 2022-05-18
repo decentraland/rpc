@@ -1,12 +1,23 @@
 import { Writer, Reader } from "protobufjs/minimal"
 
 export type CallOptions = {}
-export type CallContext = {}
 
-export type MethodRequest<Definition extends MethodDefinition<any, any>> =
-  Definition extends MethodDefinition<infer T, any, any, any> ? T : never
-export type MethodResponse<Definition extends MethodDefinition<any, any>> =
-  Definition extends MethodDefinition<any, infer T, any, any> ? T : never
+export type MethodRequest<Definition extends MethodDefinition<any, any>> = Definition extends MethodDefinition<
+  infer T,
+  any,
+  any,
+  any
+>
+  ? T
+  : never
+export type MethodResponse<Definition extends MethodDefinition<any, any>> = Definition extends MethodDefinition<
+  any,
+  infer T,
+  any,
+  any
+>
+  ? T
+  : never
 
 export type TsProtoServiceDefinition = {
   name: string
@@ -125,13 +136,13 @@ export type BidiStreamingClientMethod<Request, Response, CallOptionsExt = {}> = 
   options?: CallOptions & CallOptionsExt
 ) => AsyncGenerator<Response>
 
-export type RawServiceImplementation<Service extends ServiceDefinition, CallContextExt = {}> = {
+export type RawServiceImplementation<Service extends ServiceDefinition, CallContextExt> = {
   [Method in keyof Service]: MethodImplementation<Service[Method], CallContextExt>
 }
 
 export type MethodImplementation<
   Definition extends MethodDefinition<any, any, any, any>,
-  CallContextExt = {}
+  CallContextExt
 > = Definition["requestStream"] extends false
   ? Definition["responseStream"] extends false
     ? UnaryMethodImplementation<MethodRequest<Definition>, MethodResponse<Definition>, CallContextExt>
@@ -146,24 +157,24 @@ export type MethodImplementation<
     : never
   : never
 
-export type UnaryMethodImplementation<Request, Response, CallContextExt = {}> = (
+export type UnaryMethodImplementation<Request, Response, CallContextExt> = (
   request: Request,
-  context: CallContext & CallContextExt
+  context: CallContextExt
 ) => Promise<Response>
 
-export type ServerStreamingMethodImplementation<Request, Response, CallContextExt = {}> = (
+export type ServerStreamingMethodImplementation<Request, Response, CallContextExt> = (
   request: Request,
-  context: CallContext & CallContextExt
+  context: CallContextExt
 ) => ServerStreamingMethodResult<Response>
 
-export type ClientStreamingMethodImplementation<Request, Response, CallContextExt = {}> = (
+export type ClientStreamingMethodImplementation<Request, Response, CallContextExt> = (
   request: AsyncIterable<Request>,
-  context: CallContext & CallContextExt
+  context: CallContextExt
 ) => Promise<Response>
 
-export type BidiStreamingMethodImplementation<Request, Response, CallContextExt = {}> = (
+export type BidiStreamingMethodImplementation<Request, Response, CallContextExt> = (
   request: AsyncIterable<Request>,
-  context: CallContext & CallContextExt
+  context: CallContextExt
 ) => ServerStreamingMethodResult<Response>
 
 export type ServerStreamingMethodResult<Response> = {

@@ -1,10 +1,7 @@
 import { Suite } from "benchmark"
 import * as helpers from "./helpers"
 import { BookServiceDefinition } from "./codegen/client"
-import {
-  loadService,
-  registerService,
-} from "../src/codegen"
+import { loadService, registerService } from "../src/codegen"
 
 const books = [
   { author: "mr menduz", isbn: 1234, title: "1001 reasons to write your own OS" },
@@ -14,28 +11,26 @@ const books = [
 ]
 
 async function test() {
-  const testEnv = helpers.createSimpleTestEnvironment({
-    async initializePort(port) {
-      registerService(port, BookServiceDefinition, async () => ({
-        async getBook(req) {
-          return {
-            author: "menduz",
-            isbn: req.isbn,
-            title: "Rpc onion layers",
-          }
-        },
-        async *queryBooks(req) {
-          for (let i = 0; i < 100; i++) {
-            yield* books
-          }
-        },
-        async *queryBooksNoAck(req) {
-          for (let i = 0; i < 100; i++) {
-            yield* books
-          }
-        },
-      }))
-    },
+  const testEnv = helpers.createSimpleTestEnvironment(async function (port) {
+    registerService(port, BookServiceDefinition, async () => ({
+      async getBook(req) {
+        return {
+          author: "menduz",
+          isbn: req.isbn,
+          title: "Rpc onion layers",
+        }
+      },
+      async *queryBooks(req) {
+        for (let i = 0; i < 100; i++) {
+          yield* books
+        }
+      },
+      async *queryBooksNoAck(req) {
+        for (let i = 0; i < 100; i++) {
+          yield* books
+        }
+      },
+    }))
   })
 
   const { rpcClient } = await testEnv.start()

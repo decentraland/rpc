@@ -5,42 +5,40 @@ import { createSimpleTestEnvironment, takeAsync } from "./helpers"
 const FAIL_WITH_EXCEPTION_ISBN = 1
 
 describe("codegen client", () => {
-  const testEnv = createSimpleTestEnvironment({
-    async initializePort(port) {
-      port.registerModule("BookService", async (port) => ({
-        async GetBook(arg: Uint8Array) {
-          const req = GetBookRequest.decode(arg)
+  const testEnv = createSimpleTestEnvironment(async function (port) {
+    port.registerModule("BookService", async (port) => ({
+      async GetBook(arg: Uint8Array) {
+        const req = GetBookRequest.decode(arg)
 
-          if (req.isbn == FAIL_WITH_EXCEPTION_ISBN) throw new Error("ErrorMessage")
+        if (req.isbn == FAIL_WITH_EXCEPTION_ISBN) throw new Error("ErrorMessage")
 
-          return Book.encode({
-            author: "menduz",
-            isbn: req.isbn,
-            title: "Rpc onion layers",
-          }).finish()
-        },
-        async *QueryBooks(arg: Uint8Array) {
-          const req = QueryBooksRequest.decode(arg)
+        return Book.encode({
+          author: "menduz",
+          isbn: req.isbn,
+          title: "Rpc onion layers",
+        }).finish()
+      },
+      async *QueryBooks(arg: Uint8Array) {
+        const req = QueryBooksRequest.decode(arg)
 
-          if (req.authorPrefix == "fail_before_yield") throw new Error("fail_before_yield")
+        if (req.authorPrefix == "fail_before_yield") throw new Error("fail_before_yield")
 
-          const books = [
-            { author: "mr menduz", isbn: 1234, title: "1001 reasons to write your own OS" },
-            { author: "mr cazala", isbn: 1111, title: "Advanced CSS" },
-            { author: "mr mannakia", isbn: 7666, title: "Advanced binary packing" },
-            { author: "mr kuruk", isbn: 7668, title: "Advanced bots AI" },
-          ]
+        const books = [
+          { author: "mr menduz", isbn: 1234, title: "1001 reasons to write your own OS" },
+          { author: "mr cazala", isbn: 1111, title: "Advanced CSS" },
+          { author: "mr mannakia", isbn: 7666, title: "Advanced binary packing" },
+          { author: "mr kuruk", isbn: 7668, title: "Advanced bots AI" },
+        ]
 
-          for (const book of books) {
-            if (book.author.includes(req.authorPrefix)) {
-              yield Book.encode(book).finish()
-            }
+        for (const book of books) {
+          if (book.author.includes(req.authorPrefix)) {
+            yield Book.encode(book).finish()
           }
+        }
 
-          if (req.authorPrefix == "fail_before_end") throw new Error("fail_before_end")
-        },
-      }))
-    },
+        if (req.authorPrefix == "fail_before_end") throw new Error("fail_before_end")
+      },
+    }))
   })
 
   let service: RpcClientModule<BookServiceDefinition>

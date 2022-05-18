@@ -6,9 +6,13 @@ export type BasicTestModule = {
   getPortId(): Promise<Uint8Array>
   returnEmpty(): Promise<void>
   identity(data: Uint8Array): Promise<Uint8Array>
+  assert(t: Uint8Array): Promise<Uint8Array>
 }
 
-export async function configureTestPortServer(port: RpcServerPort) {
+export async function configureTestPortServer<Context = void>(
+  port: RpcServerPort<any>,
+  assert?: (t: Uint8Array, context: Context) => Promise<Uint8Array>
+) {
   log(`! Initializing port ${port.portId} ${port.portName}`)
   port.registerModule(
     "echo",
@@ -23,6 +27,7 @@ export async function configureTestPortServer(port: RpcServerPort) {
       async identity(test) {
         return test
       },
+      assert: assert as any,
     })
   )
 }
@@ -52,10 +57,8 @@ export async function testPort(rpcClient: RpcClient, portName: string) {
 }
 
 describe("Helpers simple req/res", () => {
-  const testEnv = createSimpleTestEnvironment({
-    async initializePort(port) {
-      await configureTestPortServer(port)
-    },
+  const testEnv = createSimpleTestEnvironment(async function (port) {
+    await configureTestPortServer(port)
   })
 
   it("creates the server", async () => {

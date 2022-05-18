@@ -31,41 +31,39 @@ async function testPort(rpcClient: RpcClient, portName: string) {
 
 describe("Helpers simple req/res", () => {
   let remoteCallCounter = 0
-  const testEnv = createSimpleTestEnvironment({
-    async initializePort(port) {
-      log(`! Initializing port ${port.portId} ${port.portName}`)
-      port.registerModule("echo", async (port) => ({
-        async *basic() {
-          yield Uint8Array.from([0])
-          yield Uint8Array.from([1])
-          yield Uint8Array.from([2])
-          yield Uint8Array.from([3])
-        },
-        async *throwFirst() {
-          throw new Error("safe error 1")
-        },
-        async *throwSecond() {
-          yield Uint8Array.from([0])
-          throw new Error("safe error 2")
-        },
-        async *infiniteCounter() {
-          let counter = 0
-          while (true) {
-            remoteCallCounter++
-            counter++
-            log("infiniteCounter yielding #" + counter + " " + (counter % 0xff))
-            yield new Uint8Array([counter % 0xff])
-          }
-        },
-        async *parameterCounter(data) {
-          let total = data[0]
-          while (total > 0) {
-            total--
-            yield new Uint8Array([total % 0xff])
-          }
-        },
-      }))
-    },
+  const testEnv = createSimpleTestEnvironment(async function (port) {
+    log(`! Initializing port ${port.portId} ${port.portName}`)
+    port.registerModule("echo", async (port) => ({
+      async *basic() {
+        yield Uint8Array.from([0])
+        yield Uint8Array.from([1])
+        yield Uint8Array.from([2])
+        yield Uint8Array.from([3])
+      },
+      async *throwFirst() {
+        throw new Error("safe error 1")
+      },
+      async *throwSecond() {
+        yield Uint8Array.from([0])
+        throw new Error("safe error 2")
+      },
+      async *infiniteCounter() {
+        let counter = 0
+        while (true) {
+          remoteCallCounter++
+          counter++
+          log("infiniteCounter yielding #" + counter + " " + (counter % 0xff))
+          yield new Uint8Array([counter % 0xff])
+        }
+      },
+      async *parameterCounter(data) {
+        let total = data[0]
+        while (total > 0) {
+          total--
+          yield new Uint8Array([total % 0xff])
+        }
+      },
+    }))
   })
 
   it("basic iteration", async () => {

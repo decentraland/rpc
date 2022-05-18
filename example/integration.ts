@@ -6,17 +6,26 @@
 // 2nd step: create a server. the server will be listening to new transport
 //           connections. That is analogous to socket connections
 import { createRpcClient, createRpcServer } from "../src/index"
-import { registerBookServiceServerImplementation } from "./server"
+import { registerBookServiceServerImplementation, TestContext } from "./server"
+
+// this emulates a server context with components
+const context: TestContext = {
+  hardcodedDatabase: [
+    { author: "mr menduz", isbn: 1234, title: "1001 reasons to write your own OS" },
+    { author: "mr cazala", isbn: 1111, title: "Advanced CSS" },
+    { author: "mr mannakia", isbn: 7666, title: "Advanced binary packing" },
+    { author: "mr kuruk", isbn: 7668, title: "Advanced bots AI" },
+  ],
+}
 
 console.log("> Creating server")
-const rpcServer = createRpcServer({
-  // the initializePort function will be called every time a port is created.
-  // it should register the available APIs/Modules for the specified port
-  async initializePort(port) {
-    console.log("  Creating server port: " + port.portName)
-    // 2nd.1 step: we register the API for the new port
-    registerBookServiceServerImplementation(port)
-  },
+const rpcServer = createRpcServer<TestContext>({})
+// the handler function will be called every time a port is created.
+// it should register the available APIs/Modules for the specified port
+rpcServer.setHandler(async function handler(port) {
+  console.log("  Creating server port: " + port.portName)
+  // 2nd.1 step: we register the API for the new port
+  registerBookServiceServerImplementation(port)
 })
 
 // 3rd step: create a transport pair. In this case we will use a in-memory transport
@@ -31,10 +40,11 @@ const clientPromise = createRpcClient(clientSocket)
 
 // 5th step: connect the "socket" to the server
 console.log("> Attaching transport")
-rpcServer.attachTransport(serverSocket)
+rpcServer.attachTransport(serverSocket, context)
 
 import { createBookServiceClient } from "./client"
 import expect from "expect"
+import { Book } from "./api"
 
 async function handleClientCreation() {
   // 6th step: once connected to the server, ask the server to create a port
@@ -56,6 +66,12 @@ async function handleClientCreation() {
     isbn: 19997,
     title: "Rpc onion layers",
   })
+
+  const list: Book[] = []
+  for await (const book of clientBookService.queryBooks({ authorPrefix: "mr" })) {
+    list.push(book)
+  }
+  expect(list).toEqual(context.hardcodedDatabase)
 }
 
 handleClientCreation().catch((err) => {

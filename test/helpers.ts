@@ -1,4 +1,4 @@
-import { createRpcClient, createRpcServer, CreateRpcServerOptions, RpcClient, Transport } from "../src"
+import { createRpcClient, createRpcServer, CreateRpcServerOptions, RpcClient, RpcServerHandler, Transport } from "../src"
 import { log } from "./logger"
 import { inspect } from "util"
 import { MemoryTransport } from "../src/transports/Memory"
@@ -44,7 +44,7 @@ export function instrumentTransport(transport: Transport, name: string) {
 export function instrumentMemoryTransports(memoryTransport: ReturnType<typeof MemoryTransport>) {
   const { client, server } = memoryTransport
 
-  console.trace("> Creating memory transport")
+  log("> Creating memory transport")
 
   // only instrument while running tests
   instrumentTransport(client, "client")
@@ -53,12 +53,13 @@ export function instrumentMemoryTransports(memoryTransport: ReturnType<typeof Me
   return memoryTransport
 }
 
-export function createSimpleTestEnvironment(options: CreateRpcServerOptions) {
-  async function start() {
+export function createSimpleTestEnvironment<Context = void>(handler: RpcServerHandler<Context>, options: CreateRpcServerOptions<Context> = {}) {
+  async function start(context: Context) {
     const memoryTransport = MemoryTransport()
     instrumentMemoryTransports(memoryTransport)
 
     const rpcServer = createRpcServer(options)
+    rpcServer.setHandler(handler)
 
     let clientClosed = false
     let serverClosed = false
@@ -71,7 +72,7 @@ export function createSimpleTestEnvironment(options: CreateRpcServerOptions) {
 
     if (serverClosed) throw new Error("This server is already closed. Use a new testing environment")
     log("> Creating RPC Client")
-    setImmediate(() => rpcServer.attachTransport(memoryTransport.server))
+    setImmediate(() => rpcServer.attachTransport(memoryTransport.server, context))
     const rpcClient = await createRpcClient(memoryTransport.client)
     clientClosed = false
 
@@ -79,6 +80,6 @@ export function createSimpleTestEnvironment(options: CreateRpcServerOptions) {
   }
 
   return {
-    start,
+    start
   }
 }

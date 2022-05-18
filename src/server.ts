@@ -3,6 +3,7 @@ import {
   ModuleGeneratorFunction,
   RpcServer,
   RpcServerEvents,
+  RpcServerHandler,
   RpcServerPort,
   ServerModuleDefinition,
   Transport,
@@ -25,20 +26,21 @@ import {
   RpcMessageTypes,
   StreamMessage,
 } from "./protocol"
+import { ILoggerComponent } from "@well-known-components/interfaces"
 
 let lastPortId = 0
 
 type RpcServerState = {
   transports: Set<Transport>
-  ports: Map<number, RpcServerPort>
-  portsByTransport: Map<Transport, Map<number, RpcServerPort>>
+  ports: Map<number, RpcServerPort<any>>
+  portsByTransport: Map<Transport, Map<number, RpcServerPort<any>>>
 }
 
 /**
  * @public
  */
-export type CreateRpcServerOptions = {
-  initializePort: (serverPort: RpcServerPort, transport: Transport) => Promise<void>
+export type CreateRpcServerOptions<Context> = {
+  logger?: ILoggerComponent.ILogger
 }
 
 // only use this writer in synchronous operations. It exists to prevent allocations
@@ -57,20 +59,20 @@ function getServerReadyMessage() {
 
 const transportStartMessageSerialized = getServerReadyMessage()
 
-function moduleProcedures(module: ServerModuleDefinition) {
+function moduleProcedures<Context>(module: ServerModuleDefinition<Context>) {
   return Array.from(Object.entries(module)).filter(([name, value]) => typeof value == "function")
 }
 
 /**
  * @internal
  */
-export function createServerPort(portId: number, portName: string): RpcServerPort {
+export function createServerPort<Context>(portId: number, portName: string): RpcServerPort<Context> {
   const events = mitt<RpcPortEvents>()
-  const loadedModules = new Map<string, Promise<ServerModuleDeclaration>>()
-  const procedures = new Map<number, CallableProcedureServer>()
-  const registeredModules = new Map<string, ModuleGeneratorFunction>()
+  const loadedModules = new Map<string, Promise<ServerModuleDeclaration<Context>>>()
+  const procedures = new Map<number, CallableProcedureServer<Context>>()
+  const registeredModules = new Map<string, ModuleGeneratorFunction<Context>>()
 
-  const port: RpcServerPort = {
+  const port: RpcServerPort<Context> = {
     get portId() {
       return portId
     },
@@ -91,7 +93,7 @@ export function createServerPort(portId: number, portName: string): RpcServerPor
     events.emit("close", {})
   }
 
-  async function registerModule(moduleName: string, generator: ModuleGeneratorFunction) {
+  async function registerModule(moduleName: string, generator: ModuleGeneratorFunction<Context>) {
     if (registeredModules.has(moduleName)) {
       throw new Error(`module ${moduleName} is already registered for port ${portName} (${portId}))`)
     }
@@ -99,11 +101,11 @@ export function createServerPort(portId: number, portName: string): RpcServerPor
   }
 
   async function loadModuleFromGenerator(
-    moduleFuture: Promise<ServerModuleDefinition>
-  ): Promise<ServerModuleDeclaration> {
+    moduleFuture: Promise<ServerModuleDefinition<Context>>
+  ): Promise<ServerModuleDeclaration<Context>> {
     const module = await moduleFuture
 
-    const ret: ServerModuleDeclaration = {
+    const ret: ServerModuleDeclaration<Context> = {
       procedures: [],
     }
 
@@ -120,7 +122,7 @@ export function createServerPort(portId: number, portName: string): RpcServerPor
     return ret
   }
 
-  function loadModule(moduleName: string): Promise<ServerModuleDeclaration> {
+  function loadModule(moduleName: string): Promise<ServerModuleDeclaration<Context>> {
     if (loadedModules.has(moduleName)) {
       return loadedModules.get(moduleName)!
     }
@@ -136,12 +138,12 @@ export function createServerPort(portId: number, portName: string): RpcServerPor
     return moduleFuture
   }
 
-  function callProcedure(procedureId: number, payload: Uint8Array): AsyncProcedureResultServer {
+  function callProcedure(procedureId: number, payload: Uint8Array, context: Context): AsyncProcedureResultServer {
     const procedure = procedures.get(procedureId)!
     if (!procedure) {
       throw new Error(`procedureId ${procedureId} is missing in ${portName} (${portId}))`)
     }
-    return procedure(payload)
+    return procedure(payload, context)
   }
 
   return port
@@ -152,12 +154,14 @@ function getPortFromState(portId: number, transport: Transport, state: RpcServer
 }
 
 // @internal
-export async function handleCreatePort(
+export async function handleCreatePort<Context>(
   transport: Transport,
   createPortMessage: CreatePort,
   messageNumber: number,
-  options: CreateRpcServerOptions,
-  state: RpcServerState
+  options: CreateRpcServerOptions<Context>,
+  handler: RpcServerHandler<Context>,
+  state: RpcServerState,
+  context: Context
 ) {
   lastPortId++
 
@@ -168,7 +172,7 @@ export async function handleCreatePort(
   state.ports.set(port.portId, port)
   state.portsByTransport.set(transport, byTransport)
 
-  await options.initializePort(port, transport)
+  await handler(port, transport, context)
 
   unsafeSyncWriter.reset()
   CreatePortResponse.encode(
@@ -231,12 +235,13 @@ export async function handleDestroyPort(
 }
 
 // @internal
-export async function handleRequest(
+export async function handleRequest<Context>(
   ackDispatcher: AckDispatcher,
   request: Request,
   messageNumber: number,
   state: RpcServerState,
-  transport: Transport
+  transport: Transport,
+  context: Context
 ) {
   const port = getPortFromState(request.portId, transport, state)
 
@@ -257,7 +262,7 @@ export async function handleRequest(
     return
   }
 
-  const result = await port.callProcedure(request.procedureId, request.payload)
+  const result = await port.callProcedure(request.procedureId, request.payload, context)
   const response = Response.fromJSON({
     messageIdentifier: calculateMessageIdentifier(RpcMessageTypes.RpcMessageTypes_RESPONSE, messageNumber),
     payload: Uint8Array.from([]),
@@ -318,7 +323,7 @@ export async function handleRequest(
 /**
  * @public
  */
-export function createRpcServer(options: CreateRpcServerOptions): RpcServer {
+export function createRpcServer<Context = {}>(options: CreateRpcServerOptions<Context>): RpcServer<Context> {
   const events = mitt<RpcServerEvents>()
   const state: RpcServerState = {
     ports: new Map(),
@@ -350,19 +355,22 @@ export function createRpcServer(options: CreateRpcServerOptions): RpcServer {
     removeTransport(transport)
   }
 
+  let handler: RpcServerHandler<Context>
+
   async function handleMessage(
     messageType: number,
     parsedMessage: any,
     messageNumber: number,
     transport: Transport,
-    ackHelper: AckDispatcher
+    ackHelper: AckDispatcher,
+    context: Context
   ) {
     if (messageType == RpcMessageTypes.RpcMessageTypes_REQUEST) {
-      await handleRequest(ackHelper, parsedMessage, messageNumber, state, transport)
+      await handleRequest(ackHelper, parsedMessage, messageNumber, state, transport, context)
     } else if (messageType == RpcMessageTypes.RpcMessageTypes_REQUEST_MODULE) {
       await handleRequestModule(transport, parsedMessage, messageNumber, state)
     } else if (messageType == RpcMessageTypes.RpcMessageTypes_CREATE_PORT) {
-      const port = await handleCreatePort(transport, parsedMessage, messageNumber, options, state)
+      const port = await handleCreatePort(transport, parsedMessage, messageNumber, options, handler, state, context)
       port.on("close", () => events.emit("portClosed", { port }))
     } else if (messageType == RpcMessageTypes.RpcMessageTypes_DESTROY_PORT) {
       await handleDestroyPort(transport, parsedMessage, messageNumber, state)
@@ -378,10 +386,15 @@ export function createRpcServer(options: CreateRpcServerOptions): RpcServer {
       )
     }
   }
-
   return {
     ...events,
-    attachTransport(newTransport: Transport) {
+    setHandler(_handler) {
+      handler = _handler
+    },
+    attachTransport(newTransport: Transport, context: Context) {
+      if (!handler) {
+        throw new Error("A handler was not set for this RpcServer")
+      }
       state.transports.add(newTransport)
       const ackHelper = createAckHelper(newTransport)
       newTransport.on("message", async (message) => {
@@ -391,8 +404,13 @@ export function createRpcServer(options: CreateRpcServerOptions): RpcServer {
           if (parsedMessage) {
             const [messageType, message, messageNumber] = parsedMessage
             try {
-              await handleMessage(messageType, message, messageNumber, newTransport, ackHelper)
+              await handleMessage(messageType, message, messageNumber, newTransport, ackHelper, context!)
             } catch (err: any) {
+              options.logger?.error("Error handling remote request", {
+                message: err.message,
+                name: err.name,
+                stack: err.stack as any,
+              })
               unsafeSyncWriter.reset()
               RemoteError.encode(
                 {
@@ -408,7 +426,7 @@ export function createRpcServer(options: CreateRpcServerOptions): RpcServer {
               newTransport.sendMessage(unsafeSyncWriter.finish())
             }
           } else {
-            newTransport.emit("error", new Error(`Unknown message ${message}`))
+            newTransport.emit("error", new Error(`Transport received unknown message: ${message}`))
           }
         } catch (err: any) {
           newTransport.emit("error", err)
@@ -420,6 +438,11 @@ export function createRpcServer(options: CreateRpcServerOptions): RpcServer {
       })
 
       newTransport.on("error", (error) => {
+        options.logger?.error("Error in transport", {
+          message: error.message,
+          name: error.name,
+          stack: error.stack as any,
+        })
         handleTransportError(newTransport, error)
       })
 

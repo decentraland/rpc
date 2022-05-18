@@ -41,7 +41,7 @@ export type AsyncProcedureResultClient = Promise<Uint8Array | AsyncGenerator<Uin
 /**
  * @public
  */
-export type CallableProcedureServer = (payload: Uint8Array) => AsyncProcedureResultServer
+export type CallableProcedureServer<Context> = (payload: Uint8Array, context: Context) => AsyncProcedureResultServer
 /**
  * @public
  */
@@ -49,21 +49,21 @@ export type CallableProcedureClient = (payload: Uint8Array) => AsyncProcedureRes
 /**
  * @public
  */
-export type ServerModuleProcedure = {
+export type ServerModuleProcedure<Context> = {
   procedureName: string
   procedureId: number
-  callable: CallableProcedureServer
+  callable: CallableProcedureServer<Context>
 }
 /**
  * @public
  */
-export type ServerModuleDeclaration = {
-  procedures: ServerModuleProcedure[]
+export type ServerModuleDeclaration<Context> = {
+  procedures: ServerModuleProcedure<Context>[]
 }
 /**
  * @public
  */
-export type ServerModuleDefinition = Record<string, CallableProcedureServer>
+export type ServerModuleDefinition<Context> = Record<string, CallableProcedureServer<Context>>
 /**
  * @public
  */
@@ -112,23 +112,25 @@ export type RpcClient = {
 /**
  * @public
  */
-export type ModuleGeneratorFunction = (port: RpcServerPort) => Promise<ServerModuleDefinition>
+export type ModuleGeneratorFunction<Context> = (
+  port: RpcServerPort<Context>
+) => Promise<ServerModuleDefinition<Context>>
 
 /**
  * @public
  */
-export type RpcServerPort = Pick<Emitter<RpcPortEvents>, "on" | "emit"> & {
+export type RpcServerPort<Context> = Pick<Emitter<RpcPortEvents>, "on" | "emit"> & {
   readonly portId: number
   readonly portName: string
   /**
    * Used to register the available APIs for the specified port
    */
-  registerModule(moduleName: string, moduleDefinition: ModuleGeneratorFunction): void
+  registerModule(moduleName: string, moduleDefinition: ModuleGeneratorFunction<Context>): void
   /**
    * Used to load modules based on their definition and availability.
    */
-  loadModule(moduleName: string): Promise<ServerModuleDeclaration>
-  callProcedure(procedureId: number, argument: Uint8Array): AsyncProcedureResultServer
+  loadModule(moduleName: string): Promise<ServerModuleDeclaration<any>>
+  callProcedure(procedureId: number, argument: Uint8Array, context: Context): AsyncProcedureResultServer
   close(): void
 }
 
@@ -136,8 +138,8 @@ export type RpcServerPort = Pick<Emitter<RpcPortEvents>, "on" | "emit"> & {
  * @public
  */
 export type RpcServerEvents = {
-  portCreated: { port: RpcServerPort }
-  portClosed: { port: RpcServerPort }
+  portCreated: { port: RpcServerPort<any> }
+  portClosed: { port: RpcServerPort<any> }
   transportClosed: { transport: Transport }
   transportError: { transport: Transport; error: Error }
 }
@@ -154,6 +156,16 @@ export type RpcServerEvents = {
  * The RpcServer also generates the portIds.
  * @public
  */
-export type RpcServer = Pick<Emitter<RpcServerEvents>, "on" | "emit"> & {
-  attachTransport(transport: Transport): void
+export type RpcServer<Context = {}> = Pick<Emitter<RpcServerEvents>, "on" | "emit"> & {
+  attachTransport(transport: Transport, context: Context): void
+  setHandler(handler: RpcServerHandler<Context>): void
 }
+
+/**
+ * @public
+ */
+export type RpcServerHandler<Context> = (
+  serverPort: RpcServerPort<Context>,
+  transport: Transport,
+  context: Context
+) => Promise<void>
