@@ -107,7 +107,7 @@ them in control of the combinatorial semantics of the library.
 ```typescript
 // worker.ts
 
-import { createClient } from "@dcl/rpc"
+import { createRpcRpcClient } from "@dcl/rpc"
 
 const rpcClient = createRpcClient(WebSocketTransport("wss://server:1234"))
 const client = await rpcClient.createPort("scene")
