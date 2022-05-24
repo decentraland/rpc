@@ -36,6 +36,8 @@ type RpcServerState = {
   portsByTransport: Map<Transport, Map<number, RpcServerPort<any>>>
 }
 
+const EMPTY_U8A = Uint8Array.from([])
+
 /**
  * @public
  */
@@ -265,7 +267,7 @@ export async function handleRequest<Context>(
   const result = await port.callProcedure(request.procedureId, request.payload, context)
   const response = Response.fromJSON({
     messageIdentifier: calculateMessageIdentifier(RpcMessageTypes.RpcMessageTypes_RESPONSE, messageNumber),
-    payload: Uint8Array.from([]),
+    payload: EMPTY_U8A,
   })
 
   if (result instanceof Uint8Array) {
@@ -282,7 +284,7 @@ export async function handleRequest<Context>(
       ack: false,
       sequenceId: 0,
       messageIdentifier: 0,
-      payload: Uint8Array.of(),
+      payload: EMPTY_U8A,
       portId: request.portId,
     })
 
@@ -297,13 +299,10 @@ export async function handleRequest<Context>(
       )
       reusedStreamMessage.payload = elem
       reusedStreamMessage.portId = request.portId
-      // we use Promise.race to react to the transport close events
-      const ret = await Promise.race([
-        ackDispatcher.sendWithAck(reusedStreamMessage),
-        new Promise<StreamMessage>((_, reject) =>
-          transport.on("close", () => reject(new Error("Transport closed while sending stream")))
-        ),
-      ])
+
+      // sendWithAck may fail if the transport is closed, effectively
+      // ending this iterator.
+      const ret = await ackDispatcher.sendWithAck(reusedStreamMessage)
 
       if (ret.ack) {
         continue

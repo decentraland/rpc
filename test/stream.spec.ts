@@ -1,6 +1,8 @@
 import { RpcClient } from "../src"
 import { log } from "./logger"
-import { createSimpleTestEnvironment } from "./helpers"
+import { createSimpleTestEnvironment, delay } from "./helpers"
+import { pushableChannel } from "../src/push-channel"
+import mitt from "mitt"
 
 async function testPort(rpcClient: RpcClient, portName: string) {
   log(`> Creating Port ${portName}`)
@@ -31,6 +33,8 @@ async function testPort(rpcClient: RpcClient, portName: string) {
 
 describe("Helpers simple req/res", () => {
   let remoteCallCounter = 0
+  const events = mitt<{ a: Uint8Array }>()
+  let channel: ReturnType<typeof pushableChannel>
   const testEnv = createSimpleTestEnvironment(async function (port) {
     log(`! Initializing port ${port.portId} ${port.portName}`)
     port.registerModule("echo", async (port) => ({
@@ -54,6 +58,22 @@ describe("Helpers simple req/res", () => {
           counter++
           log("infiniteCounter yielding #" + counter + " " + (counter % 0xff))
           yield new Uint8Array([counter % 0xff])
+        }
+      },
+      async *manualHackWithPushableChannel() {
+        channel = pushableChannel<Uint8Array>(() => deferCloseChannel)
+        // subscribe to room message
+        events.on("a", channel.push)
+        // forward all messages
+        for await (const message of channel) {
+          yield message as Uint8Array
+        }
+
+        // then close the channel
+        channel.close()
+
+        function deferCloseChannel() {
+          events.off("a", channel.push)
         }
       },
       async *parameterCounter(data) {
@@ -157,5 +177,56 @@ describe("Helpers simple req/res", () => {
     expect(new Uint8Array(Buffer.concat(values))).toEqual(FINAL_RESULT)
 
     expect(remoteCallCounter).toEqual(localCallCounter)
+  })
+
+  it("a remote infiniteCounter is halted IF the transport is forcefully closed", async () => {
+    const { rpcClient, transportServer } = await testEnv.start()
+    const port = await rpcClient.createPort("test1")
+    const module = (await port.loadModule("echo")) as {
+      infiniteCounter(): Promise<AsyncGenerator<Uint8Array>>
+    }
+    const values: Uint8Array[] = []
+    const FINAL_RESULT = new Uint8Array([1, 2, 3])
+    let localCallCounter = 0
+    remoteCallCounter = 0
+
+    await expect(async () => {
+      for await (const u8a of await module.infiniteCounter()) {
+        values.push(u8a)
+        localCallCounter++
+        if (localCallCounter == FINAL_RESULT.length) {
+          transportServer.close()
+        }
+      }
+    }).rejects.toThrow("RPC Transport closed")
+
+    expect(new Uint8Array(Buffer.concat(values))).toEqual(FINAL_RESULT)
+
+    expect(remoteCallCounter).toEqual(localCallCounter)
+  })
+
+  it("a remote manualHackWithPushableChannel is gracefully stopped from client side on third iteration", async () => {
+    const { rpcClient } = await testEnv.start()
+    const port = await rpcClient.createPort("test1")
+    const module = (await port.loadModule("echo")) as {
+      manualHackWithPushableChannel(): Promise<AsyncGenerator<Uint8Array>>
+    }
+
+    async function test() {
+      for await (const u8a of await module.manualHackWithPushableChannel()) {
+        expect(channel.isClosed()).toEqual(false)
+        return u8a
+      }
+    }
+
+    const ret = test()
+
+    await delay(100)
+
+    events.emit("a", new Uint8Array([1]))
+    expect(await ret).toEqual(new Uint8Array([1]))
+
+    await delay(100)
+    expect(channel.isClosed()).toEqual(true)
   })
 })

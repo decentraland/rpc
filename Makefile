@@ -62,10 +62,14 @@ build:
 	./node_modules/.bin/api-extractor run $(LOCAL_ARG) --typescript-compiler-folder ./node_modules/typescript
 
 cheap-perf:
-	@time node_modules/.bin/ts-node test/bench.ts
+	./perf.sh
+
+inspect:
+	node_modules/.bin/tsc -p test/benchmarks/tsconfig.json
+	node --inspect-brk test/benchmarks/compilated/test/benchmarks/bench.js
 
 integration-example:
 	@cd example; ./build.sh
 	@TS_NODE_PROJECT="example/tsconfig.json" node_modules/.bin/ts-node ./example/integration.ts
 
-.PHONY: build test cheap-perf integration-example
+.PHONY: build test cheap-perf integration-example inspect

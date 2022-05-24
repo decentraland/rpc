@@ -1,3 +1,4 @@
+import mitt from "mitt"
 import { pushableChannel } from "../src/push-channel"
 import { takeAsync } from "./helpers"
 
@@ -29,7 +30,10 @@ describe.only("push channel", () => {
   })
 
   it("break in the iterator closes the channel", async () => {
-    const chan = pushableChannel<number>(() => void 0)
+    let closedCalled = false
+    const chan = pushableChannel<number>(() => {
+      closedCalled = true
+    })
 
     expect(chan.isClosed()).toEqual(false)
     void chan.push(0)
@@ -42,6 +46,37 @@ describe.only("push channel", () => {
     }
 
     expect(chan.isClosed()).toEqual(true)
+    expect(closedCalled).toEqual(true)
+  })
+
+  it("breaking the channel as generator should finish execution", async () => {
+    let closedCalled = false
+    let didCompleteTestFunction = false
+    const events = mitt()
+
+    async function* test() {
+      const chan = pushableChannel<any>(() => {
+        closedCalled = true
+        events.off("*", chan.push)
+      })
+      events.on("*", chan.push)
+      for await (const num of chan) {
+        yield num
+      }
+    }
+
+    const ret = takeAsync(test(), 3)
+
+    await new Promise((ret) => setTimeout(ret, 100))
+
+    void events.emit("a", 0)
+    void events.emit("a", 0)
+    void events.emit("a", 0)
+
+    await new Promise((ret) => setTimeout(ret, 100))
+
+    expect(await ret).toEqual(["a", "a", "a"])
+    expect(closedCalled).toEqual(true)
   })
 
   it("it works as a job queue", async () => {
@@ -155,7 +190,7 @@ describe.only("push channel", () => {
   })
 
   it("generator yield basic case", async () => {
-    const chan = pushableChannel<number>(() => void 0)
+    let chan = pushableChannel<number>(() => void 0)
     let values: number[] = []
 
     async function* generator() {
@@ -171,6 +206,8 @@ describe.only("push channel", () => {
       await chan.push(2)
       await chan.push(3)
     }, 10)
+
+    expect(chan.isClosed()).toEqual(false)
 
     await expect(async () => {
       for await (const val of generator()) {

@@ -9,28 +9,38 @@ export type AckDispatcher = {
 }
 
 export function createAckHelper(transport: Transport): AckDispatcher {
-  const oneTimeCallbacks = new Map<string, (msg: StreamMessage) => void>()
+  const oneTimeCallbacks = new Map<string, [(msg: StreamMessage) => void, (err: Error) => void]>()
 
   const bb = new Writer()
+
+  transport.on("close", () => {
+    const err = new Error("Transport closed while waiting the ACK")
+    oneTimeCallbacks.forEach(([_resolve, reject]) => reject(err))
+    oneTimeCallbacks.clear()
+  })
 
   return {
     receiveAck(data: StreamMessage, messageNumber: number) {
       const key = `${messageNumber},${data.sequenceId}`
       const fut = oneTimeCallbacks.get(key)
       if (fut) {
-        fut(data)
         oneTimeCallbacks.delete(key)
+        fut[0](data)
       }
     },
     async sendWithAck(data: StreamMessage): Promise<StreamMessage> {
-      return new Promise<StreamMessage>((ret) => {
-        const [_, messageNumber] = parseMessageIdentifier(data.messageIdentifier)
-        oneTimeCallbacks.set(`${messageNumber},${data.sequenceId}`, ret)
+      const [_, messageNumber] = parseMessageIdentifier(data.messageIdentifier)
+      const key = `${messageNumber},${data.sequenceId}`
 
-        bb.reset()
-        StreamMessage.encode(data, bb)
-        transport.sendMessage(bb.finish())
+      const ret = new Promise<StreamMessage>(function ackPromise(ret, rej) {
+        oneTimeCallbacks.set(key, [ret, rej])
       })
+
+      bb.reset()
+      StreamMessage.encode(data, bb)
+      transport.sendMessage(bb.finish())
+
+      return ret
     },
   }
 }
