@@ -83,6 +83,29 @@ async function test() {
   }
 
   suite
+    .add("PREWARM GetBook", {
+      defer: true,
+      async fn(deferred) {
+        for (let i = 0; i < ITER_MULTIPLIER; i++) {
+          const ret = await service.getBook({ isbn: 1234 })
+          if (ret.isbn != 1234) throw new Error("invalid number")
+        }
+
+        deferred.resolve()
+      },
+    })
+    .add("PREWARM QueryBooks", {
+      defer: true,
+      fn: benchBooks,
+    })
+    .add("QPREWARM ueryBooksNoAck", {
+      defer: true,
+      fn: benchBooksNoAck,
+    })
+    .add("QueryBooks", {
+      defer: true,
+      fn: benchBooks,
+    })
     .add("GetBook", {
       defer: true,
       async fn(deferred) {
@@ -94,30 +117,7 @@ async function test() {
         deferred.resolve()
       },
     })
-    .add("QueryBooks", {
-      defer: true,
-      fn: benchBooks,
-    })
     .add("QueryBooksNoAck", {
-      defer: true,
-      fn: benchBooksNoAck,
-    })
-    .add("QueryBooks 2", {
-      defer: true,
-      fn: benchBooks,
-    })
-    .add("GetBook 2", {
-      defer: true,
-      async fn(deferred) {
-        for (let i = 0; i < ITER_MULTIPLIER; i++) {
-          const ret = await service.getBook({ isbn: 1234 })
-          if (ret.isbn != 1234) throw new Error("invalid number")
-        }
-
-        deferred.resolve()
-      },
-    })
-    .add("QueryBooksNoAck 2", {
       defer: true,
       fn: benchBooksNoAck,
     })
@@ -125,7 +125,8 @@ async function test() {
       console.log(String(event.target))
 
       console.log("Relative mean error: ±" + event.target.stats.rme.toFixed(2) + "%")
-      if (event.target.stats.rme > 5) {
+      console.dir(event.target)
+      if (event.target.stats.rme > 5 && !event.target.name.includes("PREWARM")) {
         console.log("❌  FAILED, should be less than 5%")
         process.exitCode = 1
       }
