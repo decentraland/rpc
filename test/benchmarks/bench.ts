@@ -125,7 +125,6 @@ async function test() {
       console.log(String(event.target))
 
       console.log("Relative mean error: ±" + event.target.stats.rme.toFixed(2) + "%")
-      console.dir(event.target)
       if (event.target.stats.rme > 5 && !event.target.name.includes("PREWARM")) {
         console.log("❌  FAILED, should be less than 5%")
         process.exitCode = 1
