@@ -13,8 +13,11 @@ import {
   DestroyPort,
 } from "./index"
 
+const bb = new Writer()
+const EMPTY_U8A = Uint8Array.of()
+
 export function closeStreamMessage(messageNumber: number, sequenceId: number, portId: number): Uint8Array {
-  const bb = new Writer()
+  bb.reset()
   StreamMessage.encode(
     {
       messageIdentifier: calculateMessageIdentifier(RpcMessageTypes.RpcMessageTypes_STREAM_MESSAGE, messageNumber),
@@ -22,7 +25,7 @@ export function closeStreamMessage(messageNumber: number, sequenceId: number, po
       portId,
       ack: false,
       closed: true,
-      payload: Uint8Array.of(),
+      payload: EMPTY_U8A,
     },
     bb
   )
@@ -35,7 +38,7 @@ export function streamMessage(
   portId: number,
   payload: Uint8Array
 ): Uint8Array {
-  const bb = new Writer()
+  bb.reset()
   StreamMessage.encode(
     {
       messageIdentifier: calculateMessageIdentifier(RpcMessageTypes.RpcMessageTypes_STREAM_MESSAGE, messageNumber),
@@ -51,7 +54,7 @@ export function streamMessage(
 }
 
 export function streamAckMessage(messageNumber: number, sequenceId: number, portId: number): Uint8Array {
-  const bb = new Writer()
+  bb.reset()
   StreamMessage.encode(
     {
       messageIdentifier: calculateMessageIdentifier(RpcMessageTypes.RpcMessageTypes_STREAM_ACK, messageNumber),
@@ -59,7 +62,7 @@ export function streamAckMessage(messageNumber: number, sequenceId: number, port
       portId,
       ack: true,
       closed: false,
-      payload: Uint8Array.of(),
+      payload: EMPTY_U8A,
     },
     bb
   )

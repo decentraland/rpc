@@ -1,7 +1,9 @@
 import { Suite } from "benchmark"
-import * as helpers from "./helpers"
-import { BookServiceDefinition } from "./codegen/client"
-import { loadService, registerService } from "../src/codegen"
+import * as helpers from "../helpers"
+import { BookServiceDefinition } from "../codegen/client"
+import { loadService, registerService } from "../../src/codegen"
+
+const ITER_MULTIPLIER = 400
 
 const books = [
   { author: "mr menduz", isbn: 1234, title: "1001 reasons to write your own OS" },
@@ -21,12 +23,12 @@ async function test() {
         }
       },
       async *queryBooks(req) {
-        for (let i = 0; i < 100; i++) {
+        for (let i = 0; i < ITER_MULTIPLIER; i++) {
           yield* books
         }
       },
       async *queryBooksNoAck(req) {
-        for (let i = 0; i < 100; i++) {
+        for (let i = 0; i < ITER_MULTIPLIER; i++) {
           yield* books
         }
       },
@@ -46,7 +48,7 @@ async function test() {
       results.push(book)
     }
 
-    if (results.length != 400) deferred.reject("Invalid number of results, got: " + results.length)
+    if (results.length != ITER_MULTIPLIER * 4) throw new Error("Invalid number of results, got: " + results.length)
     else deferred.resolve()
   }
 
@@ -57,18 +59,38 @@ async function test() {
       results.push(book)
     }
 
-    if (results.length != 400) deferred.reject("Invalid number of results, got: " + results.length)
+    if (results.length != ITER_MULTIPLIER * 4) throw new Error("Invalid number of results, got: " + results.length)
     else deferred.resolve()
+  }
+
+  let memory: ReturnType<typeof process.memoryUsage> = process.memoryUsage()
+
+  function printMemory() {
+    const newMemory = process.memoryUsage()
+
+    function toMb(num: number) {
+      return (num / 1024 / 1024).toFixed(2) + "MB"
+    }
+
+    console.log(`
+    heapTotal: ${toMb(newMemory.heapTotal - memory.heapTotal)}
+     heapUsed: ${toMb(newMemory.heapUsed - memory.heapUsed)}
+          rss: ${toMb(newMemory.rss - memory.rss)}
+ arrayBuffers: ${toMb((newMemory as any).arrayBuffers - (memory as any).arrayBuffers)}
+    `)
+
+    memory = newMemory
   }
 
   suite
     .add("GetBook", {
       defer: true,
       async fn(deferred) {
-        for (let i = 0; i < 400; i++) {
+        for (let i = 0; i < ITER_MULTIPLIER; i++) {
           const ret = await service.getBook({ isbn: 1234 })
-          if (ret.isbn != 1234) deferred.reject(new Error("invalid number"))
+          if (ret.isbn != 1234) throw new Error("invalid number")
         }
+
         deferred.resolve()
       },
     })
@@ -84,15 +106,34 @@ async function test() {
       defer: true,
       fn: benchBooks,
     })
+    .add("GetBook 2", {
+      defer: true,
+      async fn(deferred) {
+        for (let i = 0; i < ITER_MULTIPLIER; i++) {
+          const ret = await service.getBook({ isbn: 1234 })
+          if (ret.isbn != 1234) throw new Error("invalid number")
+        }
+
+        deferred.resolve()
+      },
+    })
     .add("QueryBooksNoAck 2", {
       defer: true,
       fn: benchBooksNoAck,
     })
     .on("cycle", function (event) {
       console.log(String(event.target))
+
+      console.log("Relative mean error: ±" + event.target.stats.rme.toFixed(2) + "%")
+      if (event.target.stats.rme > 5) {
+        console.log("❌  FAILED, should be less than 5%")
+        process.exitCode = 1
+      }
+
+      printMemory()
     })
-    .on("complete", function () {
-      console.log("Fastest is " + this.filter("fastest").map("name"))
+    .on("complete", function (event) {
+      printMemory()
     })
     .run({ async: true })
 }

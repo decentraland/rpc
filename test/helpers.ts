@@ -83,3 +83,7 @@ export function createSimpleTestEnvironment<Context = void>(handler: RpcServerHa
     start
   }
 }
+
+export function delay(ms: number) {
+  return new Promise((ret) => setTimeout(ret, ms))
+}

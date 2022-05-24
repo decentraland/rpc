@@ -23,6 +23,8 @@ jobs:
         run:  make build
       - name: test
         run:  make test
+      - name: performance
+        run:  make cheap-perf
       - name: Publish
         uses: menduz/oddish-action@master
         with:

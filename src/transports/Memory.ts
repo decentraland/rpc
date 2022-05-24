@@ -10,7 +10,7 @@ export function MemoryTransport() {
     return {
       ...sender,
       sendMessage(message) {
-        receiver.emit("message", new Uint8Array(message))
+        receiver.emit("message", message)
       },
       close() {
         if (!isClosed) {

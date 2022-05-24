@@ -121,24 +121,21 @@ export function streamFromDispatcher(
     dispatcher.removeListener(messageNumber)
   }
 
-  function processMessage(message: StreamMessage, messageNumber: number) {
+  function sendAck() {
+    const closed = channel.isClosed()
+    if (!closed && !isRemoteClosed) {
+      dispatcher.transport.sendMessage(streamAckMessage(messageNumber, lastReceivedSequenceId, streamMessage.portId))
+    }
+  }
+
+  function processMessage(message: StreamMessage) {
     lastReceivedSequenceId = message.sequenceId
 
     if (message.closed) {
       isRemoteClosed = true
       channel.close()
     } else {
-      const payload = message.payload
-      const portId = message.portId
-      channel
-        .push(payload)
-        .then(() => {
-          const closed = channel.isClosed()
-          if (!closed && !isRemoteClosed) {
-            dispatcher.transport.sendMessage(streamAckMessage(messageNumber, lastReceivedSequenceId, portId))
-          }
-        })
-        .catch(channel.failAndClose)
+      channel.push(message.payload).then(sendAck).catch(channel.failAndClose)
     }
   }
 
@@ -146,9 +143,9 @@ export function streamFromDispatcher(
     const ret = parseProtocolMessage(reader)
 
     if (ret) {
-      const [messageType, message, messageNumber] = ret
+      const [messageType, message] = ret
       if (messageType == RpcMessageTypes.RpcMessageTypes_STREAM_MESSAGE) {
-        processMessage(message, messageNumber)
+        processMessage(message)
       } else if (messageType == RpcMessageTypes.RpcMessageTypes_REMOTE_ERROR_RESPONSE) {
         isRemoteClosed = true
         channel.failAndClose(
@@ -162,7 +159,7 @@ export function streamFromDispatcher(
     }
   })
 
-  processMessage(streamMessage, messageNumber)
+  processMessage(streamMessage)
 
   return channel.iterable
 }
@@ -264,7 +261,7 @@ export async function createRpcClient(transport: Transport): Promise<RpcClient> 
 
       const port = await portFuture
 
-      transport.on('close', () => {
+      transport.on("close", () => {
         port.close()
       })
 
