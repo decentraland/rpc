@@ -1,5 +1,5 @@
 import { RpcServerPort } from "../src"
-import { Book, BookServiceDefinition, GetBookRequest, QueryBooksRequest } from "./codegen/client"
+import { AlmostEmpty, Book, BookServiceDefinition, Empty, GetBookRequest, QueryBooksRequest } from "./codegen/client"
 import { createSimpleTestEnvironment, takeAsync } from "./helpers"
 import * as codegen from "../src/codegen"
 
@@ -53,6 +53,22 @@ describe("codegen client & server", () => {
 
         if (req.authorPrefix == "fail_before_end") throw new Error("fail_before_end")
       },
+      async emptyQuery() {
+        return { author: "", isbn: 0, title: "" }
+      },
+      async emptyResponse() {
+        return {}
+      },
+      async *emptyResponseStream() {
+        yield {}
+        yield {}
+        yield {}
+      },
+      async *almostEmptyResponseStream() {
+        yield { int: 0 }
+        yield { int: 1 }
+        yield { int: 0 }
+      },
     }))
   })
 
@@ -93,8 +109,36 @@ describe("codegen client & server", () => {
     expect(results).toHaveLength(4)
   })
 
+  it("AlmostEmpty stream response", async () => {
+    const results: AlmostEmpty[] = []
+
+    for await (const book of service.almostEmptyResponseStream({ author: "", isbn: 0, title: "" })) {
+      results.push(book)
+    }
+
+    expect(results).toEqual([{ int: 0 }, { int: 1 }, { int: 0 }])
+  })
+
+  it("Empty stream response", async () => {
+    const results: Empty[] = []
+
+    for await (const book of service.emptyResponseStream({ author: "", isbn: 0, title: "" })) {
+      results.push(book)
+    }
+
+    expect(results).toEqual([{}, {}, {}])
+  })
+
   it("calls to unary fails throws error in client", async () => {
     await expect(service.getBook({ isbn: FAIL_WITH_EXCEPTION_ISBN })).rejects.toThrowError("RemoteError: ErrorMessage")
+  })
+
+  it("calls to empty query works", async () => {
+    expect(await service.emptyQuery({})).toEqual({ author: "", isbn: 0, title: "" })
+  })
+
+  it("calls to empty response works", async () => {
+    expect(await service.emptyResponse({ author: "", isbn: 0, title: "" })).toEqual({})
   })
 
   it("calls to streaming fails throws error in client, fail_before_yield", async () => {

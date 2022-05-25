@@ -71,7 +71,7 @@ export function createPort(portId: number, portName: string, dispatcher: Message
       if (parsedMessage) {
         const [messageType, message] = parsedMessage
         if (messageType == RpcMessageTypes.RpcMessageTypes_REQUEST_MODULE_RESPONSE) {
-          const ret: ClientModuleDefinition = {}
+          const ret: ClientModuleDefinition<any> = {}
 
           for (let procedure of (message as RequestModuleResponse).procedures) {
             ret[procedure.procedureName] = createProcedure(portId, procedure.procedureId, dispatcher)

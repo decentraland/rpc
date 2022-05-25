@@ -9,7 +9,9 @@ import {
   RawServiceImplementation,
   MethodImplementation,
 } from "./codegen-types"
-import { RpcClientPort, RpcServerPort } from "./types"
+import { CallableProcedureClient, RpcClientPort, RpcServerPort } from "./types"
+
+const EMPTY_U8ARRAY = new Uint8Array()
 
 export function clientProcedureUnary<Request, Response>(
   port: unknown | Promise<unknown>,
@@ -21,10 +23,8 @@ export function clientProcedureUnary<Request, Response>(
     if (!(method.name in remoteModule)) throw new Error("Method " + method.name + " not implemented in server port")
 
     const result = await remoteModule[method.name](method.requestType.encode(arg).finish())
-    if (!result) {
-      throw new Error("Server sent an empty or null response to method call " + method.name)
-    }
-    return method.responseType.decode(result)
+
+    return method.responseType.decode(result ?? EMPTY_U8ARRAY)
   }
 
   return fn
@@ -38,13 +38,12 @@ export function clientProcedureStream<Request, Response>(
     const remoteModule: Record<typeof method.name, (arg: Uint8Array) => Promise<any>> = (await port) as any
 
     if (!(method.name in remoteModule)) throw new Error("Method " + method.name + " not implemented in server port")
-
     const result = await remoteModule[method.name](method.requestType.encode(arg).finish())
-    if (!result) {
-      throw new Error("Server sent an empty or null response to method call " + method.name)
-    }
-    for await (const bytes of await result) {
-      yield method.responseType.decode(bytes)
+
+    if (result) {
+      for await (const bytes of await result) {
+        yield method.responseType.decode(bytes ?? EMPTY_U8ARRAY)
+      }
     }
   }
 

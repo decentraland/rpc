@@ -67,7 +67,7 @@ export type ServerModuleDefinition<Context> = Record<string, CallableProcedureSe
 /**
  * @public
  */
-export type ClientModuleDefinition = Record<string, CallableProcedureClient>
+export type ClientModuleDefinition<keys extends string> = Record<keys, CallableProcedureClient>
 /**
  * @public
  */
@@ -93,7 +93,7 @@ export type RpcPortEvents = {
 export type RpcClientPort = Pick<Emitter<RpcPortEvents>, "on" | "all"> & {
   readonly portId: number
   readonly portName: string
-  loadModule(moduleName: string): Promise<unknown>
+  loadModule<keys extends string>(moduleName: string): Promise<ClientModuleDefinition<keys>>
   close(): void
   readonly state: "open" | "closed"
 }
