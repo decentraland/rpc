@@ -1,7 +1,14 @@
-import { createRpcClient, createRpcServer, CreateRpcServerOptions, RpcClient, RpcServerHandler, Transport } from "../src"
+import {
+  createRpcClient,
+  createRpcServer,
+  CreateRpcServerOptions,
+  RpcClient,
+  RpcServerHandler,
+  Transport,
+} from "../src"
 import { log } from "./logger"
 import { inspect } from "util"
-import { MemoryTransport } from "../src/transports/Memory"
+import { MemoryTransport, MemoryTransportOptions } from "../src/transports/Memory"
 import { parseProtocolMessage } from "../src/protocol/helpers"
 import { Reader } from "protobufjs/minimal"
 
@@ -53,9 +60,12 @@ export function instrumentMemoryTransports(memoryTransport: ReturnType<typeof Me
   return memoryTransport
 }
 
-export function createSimpleTestEnvironment<Context = void>(handler: RpcServerHandler<Context>, options: CreateRpcServerOptions<Context> = {}) {
-  async function start(context: Context) {
-    const memoryTransport = MemoryTransport()
+export function createSimpleTestEnvironment<Context = void>(
+  handler: RpcServerHandler<Context>,
+  options: CreateRpcServerOptions<Context> = {}
+) {
+  async function start(context: Context, transportOptions?: MemoryTransportOptions) {
+    const memoryTransport = MemoryTransport(transportOptions)
     instrumentMemoryTransports(memoryTransport)
 
     const rpcServer = createRpcServer(options)
@@ -80,7 +90,7 @@ export function createSimpleTestEnvironment<Context = void>(handler: RpcServerHa
   }
 
   return {
-    start
+    start,
   }
 }
 

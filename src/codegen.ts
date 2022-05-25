@@ -38,12 +38,9 @@ export function clientProcedureStream<Request, Response>(
     const remoteModule: Record<typeof method.name, (arg: Uint8Array) => Promise<any>> = (await port) as any
 
     if (!(method.name in remoteModule)) throw new Error("Method " + method.name + " not implemented in server port")
-    const result = await remoteModule[method.name](method.requestType.encode(arg).finish())
 
-    if (result) {
-      for await (const bytes of await result) {
-        yield method.responseType.decode(bytes ?? EMPTY_U8ARRAY)
-      }
+    for await (const bytes of await remoteModule[method.name](method.requestType.encode(arg).finish())) {
+      yield method.responseType.decode(bytes ?? EMPTY_U8ARRAY)
     }
   }
 

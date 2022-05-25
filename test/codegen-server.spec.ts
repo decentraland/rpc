@@ -1,11 +1,14 @@
 import { RpcServerPort } from "../src"
 import { AlmostEmpty, Book, BookServiceDefinition, Empty, GetBookRequest, QueryBooksRequest } from "./codegen/client"
-import { createSimpleTestEnvironment, takeAsync } from "./helpers"
+import { createSimpleTestEnvironment, delay, takeAsync } from "./helpers"
 import * as codegen from "../src/codegen"
+import { from, lastValueFrom, take } from "rxjs"
 
 const FAIL_WITH_EXCEPTION_ISBN = 1
 
 describe("codegen client & server", () => {
+  let infiniteGeneratorClosed = 0
+  let infiniteGeneratorEmited = 0
   const testEnv = createSimpleTestEnvironment(async function (port) {
     codegen.registerService(port, BookServiceDefinition, async () => ({
       async getBook(req: GetBookRequest) {
@@ -69,13 +72,28 @@ describe("codegen client & server", () => {
         yield { int: 1 }
         yield { int: 0 }
       },
+      async *infiniteGenerator() {
+        try {
+          while (true) {
+            infiniteGeneratorEmited++
+            if (infiniteGeneratorEmited == 15) await Promise.race([])
+            yield { int: infiniteGeneratorEmited }
+          }
+        } finally {
+          infiniteGeneratorClosed++
+        }
+      },
     }))
   })
 
   let service: codegen.RpcClientModule<BookServiceDefinition>
 
-  it("basic service wraper creation", async () => {
-    const { rpcClient } = await testEnv.start()
+  beforeAll(async () => {
+    const { rpcClient } = await testEnv.start(null, {
+      decouplingFunction: (cb) => {
+        setTimeout(cb, Math.random() * 10)
+      },
+    })
 
     const clientPort = await rpcClient.createPort("test1")
     service = codegen.loadService(clientPort, BookServiceDefinition)
@@ -151,5 +169,105 @@ describe("codegen client & server", () => {
     await expect(() => takeAsync(service.queryBooks({ authorPrefix: "fail_before_end" }))).rejects.toThrowError(
       "RemoteError: fail_before_end"
     )
+  })
+
+  it("infinite stream take rxjs 10", async () => {
+    infiniteGeneratorClosed = 0
+    infiniteGeneratorEmited = 0
+
+    const gen = from(service.infiniteGenerator({})).pipe(take(10))
+
+    await lastValueFrom(gen)
+    await delay(100)
+
+    expect(infiniteGeneratorEmited).toEqual(10)
+    expect(infiniteGeneratorClosed).toEqual(1)
+  })
+
+  it("infinite stream take rxjs 15", async () => {
+    infiniteGeneratorClosed = 0
+    infiniteGeneratorEmited = 0
+
+    const gen = from(service.infiniteGenerator({})).pipe(take(15))
+    const values: any[] = []
+
+    const sub = gen.subscribe((value) => {
+      values.push(value)
+    })
+
+    await delay(1000)
+    sub.unsubscribe()
+    await delay(100)
+
+    expect(values).toEqual([
+      { int: 1 },
+      { int: 2 },
+      { int: 3 },
+      { int: 4 },
+      { int: 5 },
+      { int: 6 },
+      { int: 7 },
+      { int: 8 },
+      { int: 9 },
+      { int: 10 },
+      { int: 11 },
+      { int: 12 },
+      { int: 13 },
+      { int: 14 },
+    ])
+    expect(infiniteGeneratorEmited).toEqual(15)
+    expect(infiniteGeneratorClosed).toEqual(1)
+  })
+
+  it("infinite stream take rxjs 0", async () => {
+    infiniteGeneratorClosed = 0
+    infiniteGeneratorEmited = 0
+
+    const gen = from(service.infiniteGenerator({})).pipe(take(0))
+    const values: any[] = []
+
+    const sub = gen.subscribe((value) => {
+      values.push(value)
+    })
+
+    await delay(1000)
+    sub.unsubscribe()
+    await delay(100)
+
+    expect(values).toEqual([])
+
+    expect(infiniteGeneratorEmited).toEqual(0)
+    expect(infiniteGeneratorClosed).toEqual(1)
+  })
+
+  it("take async iterator", async () => {
+    infiniteGeneratorClosed = 0
+    infiniteGeneratorEmited = 0
+
+    const values: any[] = []
+
+    const stream = service.infiniteGenerator({})
+
+    for await (const value of stream) {
+      values.push(value)
+      if (values.length == 10) break
+    }
+
+    await delay(100)
+
+    expect(infiniteGeneratorEmited).toEqual(10)
+    expect(infiniteGeneratorClosed).toEqual(1)
+    expect(values).toEqual([
+      { int: 1 },
+      { int: 2 },
+      { int: 3 },
+      { int: 4 },
+      { int: 5 },
+      { int: 6 },
+      { int: 7 },
+      { int: 8 },
+      { int: 9 },
+      { int: 10 },
+    ])
   })
 })
