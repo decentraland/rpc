@@ -30,7 +30,7 @@ export function WebWorkerTransport(worker: IWorker): Transport {
   })
 
   worker.addEventListener("message", (message: any) => {
-    if (message.data instanceof ArrayBuffer) {
+    if (message.data instanceof ArrayBuffer || message.data instanceof Uint8Array) {
       events.emit("message", message.data)
     } else {
       debugger
