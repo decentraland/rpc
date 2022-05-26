@@ -41,7 +41,7 @@ export function WebWorkerTransport(worker: IWorker): Transport {
   const api: Transport = {
     ...events,
     sendMessage(message) {
-      if (message instanceof ArrayBuffer) {
+      if (message instanceof ArrayBuffer || message instanceof Uint8Array) {
         worker.postMessage(message)
       } else {
         throw new Error(`WebWorkerTransport: Received unknown type of message, expecting Uint8Array`)
