@@ -133,9 +133,9 @@ export function streamFromDispatcher(
 
     if (message.closed) {
       isRemoteClosed = true
-      channel.close()
+      channel.iterable.return(null).then(sendAck)
     } else {
-      channel.push(message.payload).then(sendAck).catch(channel.failAndClose)
+      channel.push(message.payload, sendAck)
     }
   }
 

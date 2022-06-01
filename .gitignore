@@ -12,4 +12,4 @@ test/codegen/*_pb.*
 
 src/protocol/index.ts
 test/codegen/client.ts
-test/benchmarks/compilated
+test/benchmarks/compiled

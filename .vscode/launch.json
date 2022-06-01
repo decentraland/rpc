@@ -35,7 +35,8 @@
         "${workspaceRoot}/node_modules/.bin/jest",
         "--runInBand",
         "--coverage",
-        "test/codegen-server.spec.ts"
+        "-t",
+        "manualHackWithPushableChannel"
       ],
       "console": "integratedTerminal",
       "internalConsoleOptions": "neverOpen",

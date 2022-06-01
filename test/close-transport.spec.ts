@@ -1,7 +1,7 @@
 import { RpcClient } from "../src"
 import { calculateMessageIdentifier } from "../src/protocol/helpers"
 import { RpcMessageHeader, RpcMessageTypes } from "../src/protocol"
-import { createSimpleTestEnvironment } from "./helpers"
+import { createSimpleTestEnvironment, delay } from "./helpers"
 
 async function testPort(rpcClient: RpcClient, portName: string) {
   const port = await rpcClient.createPort(portName)
@@ -27,7 +27,7 @@ describe("Close transport closes streams (server side)", () => {
     }))
   })
 
-  it("creates the server", async () => {
+  it("runs the test", async () => {
     const { rpcClient, transportServer } = await testEnv.start()
 
     const { infinite } = await testPort(rpcClient, "port1")
@@ -142,7 +142,7 @@ describe("Error in transport closes the transport", () => {
     }))
   })
 
-  it("creates the server", async () => {
+  it("runs the test", async () => {
     const { rpcClient, transportServer } = await testEnv.start()
 
     const { infinite } = await testPort(rpcClient, "port1")
@@ -157,6 +157,10 @@ describe("Error in transport closes the transport", () => {
         }
       }
     }).rejects.toThrow("RPC Transport closed")
+
+    // give it a second to finish, the memory transport adds some jitter to simulate
+    // async network conditions
+    await delay(10)
 
     // the server AsyncGenerators must be closed after the transport is closed to avoid leaks
     expect(infiniteStreamClosed).toEqual(true)

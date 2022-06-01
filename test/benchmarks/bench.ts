@@ -32,6 +32,12 @@ async function test() {
           yield* books
         }
       },
+      async *almostEmptyResponseStream() { throw new Error('not implemented') },
+      async emptyQuery() { throw new Error('not implemented') },
+      async emptyResponse() { throw new Error('not implemented') },
+      async *emptyResponseStream() { throw new Error('not implemented') },
+      async *infiniteGenerator() { throw new Error('not implemented') },
+      async *failFirstGenerator() { throw new Error('not implemented') }
     }))
   })
 

@@ -287,31 +287,33 @@ export async function handleRequest<Context>(
       payload: EMPTY_U8A,
       portId: request.portId,
     })
+    try {
+      for await (const elem of iter) {
+        sequenceNumber++
+        reusedStreamMessage.closed = false
+        reusedStreamMessage.ack = false
+        reusedStreamMessage.sequenceId = sequenceNumber
+        reusedStreamMessage.messageIdentifier = calculateMessageIdentifier(
+          RpcMessageTypes.RpcMessageTypes_STREAM_MESSAGE,
+          messageNumber
+        )
+        reusedStreamMessage.payload = elem
+        reusedStreamMessage.portId = request.portId
 
-    for await (const elem of iter) {
-      sequenceNumber++
-      reusedStreamMessage.closed = false
-      reusedStreamMessage.ack = false
-      reusedStreamMessage.sequenceId = sequenceNumber
-      reusedStreamMessage.messageIdentifier = calculateMessageIdentifier(
-        RpcMessageTypes.RpcMessageTypes_STREAM_MESSAGE,
-        messageNumber
-      )
-      reusedStreamMessage.payload = elem
-      reusedStreamMessage.portId = request.portId
+        // sendWithAck may fail if the transport is closed, effectively
+        // ending this iterator.
+        const ret = await ackDispatcher.sendWithAck(reusedStreamMessage)
 
-      // sendWithAck may fail if the transport is closed, effectively
-      // ending this iterator.
-      const ret = await ackDispatcher.sendWithAck(reusedStreamMessage)
-
-      if (ret.ack) {
-        continue
-      } else if (ret.closed) {
-        // if it was closed remotely, then we end the stream right away
-        return
+        if (ret.ack) {
+          continue
+        } else if (ret.closed) {
+          // if it was closed remotely, then we end the stream right away
+          return
+        }
       }
+    } finally {
+      transport.sendMessage(closeStreamMessage(messageNumber, sequenceNumber, request.portId))
     }
-    transport.sendMessage(closeStreamMessage(messageNumber, sequenceNumber, request.portId))
   } else {
     unsafeSyncWriter.reset()
     Response.encode(response, unsafeSyncWriter)

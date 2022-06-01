@@ -28,4 +28,5 @@ service BookService {
   rpc EmptyResponseStream(Book) returns (stream Empty) {}
   rpc AlmostEmptyResponseStream(Book) returns (stream AlmostEmpty) {}
   rpc InfiniteGenerator(Empty) returns (stream AlmostEmpty) {}
+  rpc FailFirstGenerator(Empty) returns (stream AlmostEmpty) {}
 }

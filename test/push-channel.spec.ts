@@ -1,13 +1,47 @@
 import mitt from "mitt"
-import { pushableChannel } from "../src/push-channel"
+import { lastValueFrom, from, map } from "rxjs"
+import { linkedList, pushableChannel } from "../src/push-channel"
 import { takeAsync } from "./helpers"
 
-describe.only("push channel", () => {
+function promisify(fn) {
+  return (...args) => {
+    return new Promise<void>((resolve, reject) => fn(...args, x => x ? reject(x) : resolve()))
+  }
+}
+
+describe('linked list', () => {
+  it('adds one, removes one', () => {
+    const l = linkedList<any>()
+    expect(l.isEmpty()).toBeTruthy()
+    expect(l.unshift()).toBe(undefined)
+    expect(l.isEmpty()).toBeTruthy()
+    l.push(1)
+    expect(l.unshift()).toMatchObject({ value: 1 })
+    expect(l.isEmpty()).toBeTruthy()
+    expect(l.unshift()).toBe(undefined)
+    expect(l.isEmpty()).toBeTruthy()
+    l.push(1)
+    expect(l.isEmpty()).toBeFalsy()
+    l.push(2)
+    l.push(3)
+    expect(l.isEmpty()).toBeFalsy()
+    expect(l.unshift()).toMatchObject({ value: 1 })
+    expect(l.unshift()).toMatchObject({ value: 2 })
+    expect(l.isEmpty()).toBeFalsy()
+    expect(l.unshift()).toMatchObject({ value: 3 })
+    expect(l.isEmpty()).toBeTruthy()
+    expect(l.unshift()).toBe(undefined)
+  })
+})
+
+describe("push channel", () => {
   it("enqueues several elements and iterates through them", async () => {
     const chan = pushableChannel<number>(() => void 0)
     expect(chan.isClosed()).toEqual(false)
 
-    const pushes = [chan.push(1), chan.push(2), chan.push(3)]
+    const push = promisify(chan.push)
+
+    const pushes = [push(1), push(2), push(3)]
 
     const values: number[] = []
 
@@ -15,7 +49,7 @@ describe.only("push channel", () => {
       values.push(val)
       expect(chan.isClosed()).toEqual(false)
       if (val == 3) {
-        setTimeout(() => pushes.push(chan.push(4)), 100)
+        setTimeout(() => pushes.push(push(4)), 100)
       } else if (val == 4) {
         chan.close()
         expect(chan.isClosed()).toEqual(true)
@@ -34,9 +68,10 @@ describe.only("push channel", () => {
     const chan = pushableChannel<number>(() => {
       closedCalled = true
     })
+    const push = promisify(chan.push)
 
     expect(chan.isClosed()).toEqual(false)
-    void chan.push(0)
+    push(0)
     expect(chan.isClosed()).toEqual(false)
 
     for await (const val of chan) {
@@ -51,15 +86,15 @@ describe.only("push channel", () => {
 
   it("breaking the channel as generator should finish execution", async () => {
     let closedCalled = false
-    let didCompleteTestFunction = false
     const events = mitt()
 
     async function* test() {
       const chan = pushableChannel<any>(() => {
         closedCalled = true
-        events.off("*", chan.push)
+        events.off("*", push)
       })
-      events.on("*", chan.push)
+      const push = promisify(chan.push)
+      events.on("*", push)
       for await (const num of chan) {
         yield num
       }
@@ -81,14 +116,18 @@ describe.only("push channel", () => {
 
   it("it works as a job queue", async () => {
     const chan = pushableChannel<number>(() => void 0)
+    const push = promisify(chan.push)
 
-    void chan.push(0)
-    void chan.push(1)
-    void chan.push(2)
-    void chan.push(3)
-    void chan.push(4)
+    const jobs = Promise.all([
+      push(0),
+      push(1),
+      push(2),
+      push(3),
+      push(4)
+    ])
 
     const takeAll = takeAsync(chan.iterable)
+    await jobs
 
     chan.close()
 
@@ -97,22 +136,30 @@ describe.only("push channel", () => {
 
   it("it works as a job queue, iterator still works after close", async () => {
     const chan = pushableChannel<number>(() => void 0)
+    const push = promisify(chan.push)
 
-    void chan.push(0)
-    void chan.push(1)
-    void chan.push(2)
-    void chan.push(3)
-    void chan.push(4)
+    const jobs = Promise.all([
+      push(0),
+      push(1),
+      push(2),
+      push(3),
+      push(4)
+    ])
+
     chan.close()
 
-    expect(await takeAsync(chan.iterable)).toEqual([0, 1, 2, 3, 4])
+    const takeAll = takeAsync(chan.iterable)
+
+    await jobs
+
+    expect(await takeAll).toEqual([0, 1, 2, 3, 4])
   })
 
   it("throw in the iterator closes the channel", async () => {
     const chan = pushableChannel<number>(() => void 0)
-
+    const push = promisify(chan.push)
     expect(chan.isClosed()).toEqual(false)
-    void chan.push(0)
+    void push(0)
     expect(chan.isClosed()).toEqual(false)
 
     await expect(async () => {
@@ -146,12 +193,12 @@ describe.only("push channel", () => {
 
   it("close the channel without pending ops inside iterator breaks iterator", async () => {
     const chan = pushableChannel<number>(() => void 0)
-
+    const push = promisify(chan.push)
     expect(chan.isClosed()).toEqual(false)
 
     let values: number[] = []
 
-    void chan.push(1)
+    void push(1)
 
     expect(chan.isClosed()).toEqual(false)
 
@@ -161,23 +208,133 @@ describe.only("push channel", () => {
       // this should behave exactly as "break"
       chan.close()
       expect(chan.isClosed()).toEqual(true)
-      await expect(async () => await chan.push(2)).rejects.toThrow("Channel is closed")
+      await expect(async () => await push(2)).rejects.toThrow("Channel is closed")
     }
 
     expect(chan.isClosed()).toEqual(true)
     expect(values).toEqual([1])
   })
 
+  it("rxjs consumer reads a value after start the stream", async () => {
+    const chan = pushableChannel<number>(() => void 0)
+    const push = promisify(chan.push)
+    expect(chan.isClosed()).toEqual(false)
+
+    const result = lastValueFrom(from(chan))
+
+    expect(chan.isClosed()).toEqual(false)
+
+    await push(1)
+    chan.close()
+
+    expect(chan.isClosed()).toEqual(true)
+
+    expect(await result).toEqual(1)
+  })
+
+  it("emit one, read one, then pause. read callback is triggered", async () => {
+    const chan = pushableChannel<number>(() => void 0)
+    const push = promisify(chan.push)
+    expect(chan.isClosed()).toEqual(false)
+
+    expect(chan.isClosed()).toEqual(false)
+
+    const [pushed, next] = await Promise.all([
+      push(1),
+      chan.iterable.next()
+    ])
+
+    expect(chan.isClosed()).toEqual(false)
+    expect(await next.value).toEqual(1)
+
+    chan.close()
+
+    expect(chan.isClosed()).toEqual(true)
+  })
+
+  it("emit three, read one, then close stream. pending pushes must fail", async () => {
+    const chan = pushableChannel<number>(() => void 0)
+    const push = promisify(chan.push)
+    expect(chan.isClosed()).toEqual(false)
+
+    expect(chan.isClosed()).toEqual(false)
+
+    const pushes = Promise.allSettled([
+      push(1),
+      push(2),
+      push(3),
+    ])
+
+    expect((await chan.iterable.next()).value).toEqual(1)
+
+
+    expect(chan.isClosed()).toEqual(false)
+    await chan.iterable.return(null)
+    expect(chan.isClosed()).toEqual(true)
+
+    expect((await pushes).map($ => $.status)).toEqual(["fulfilled", "rejected", "rejected"])
+  })
+
+
+  it("rxjs consumer reads all preexistent values", async () => {
+    const chan = pushableChannel<number>(() => void 0)
+    expect(chan.isClosed()).toEqual(false)
+    const push = promisify(chan.push)
+
+    const promises = [push(1), push(2), push(3)]
+
+    const result = lastValueFrom(from(chan))
+
+    expect(chan.isClosed()).toEqual(false)
+    chan.close()
+    expect(chan.isClosed()).toEqual(true)
+
+    await Promise.all(promises)
+
+    expect(await result).toEqual(3)
+  })
+
+  it("async consumer reads all preexistent values", async () => {
+    const chan = pushableChannel<number>(() => void 0)
+    expect(chan.isClosed()).toEqual(false)
+    const push = promisify(chan.push)
+
+    const promises = [push(1), push(2), push(3)]
+
+    expect(await (await chan.iterable.next()).value).toEqual(1)
+    expect(await (await chan.iterable.next()).value).toEqual(2)
+    expect(await (await chan.iterable.next()).value).toEqual(3)
+
+    await Promise.all(promises)
+
+    expect(chan.isClosed()).toEqual(false)
+    chan.close()
+    expect(chan.isClosed()).toEqual(true)
+  })
+
+  it("async consumer reads zero values if the channel is closed", async () => {
+    const chan = pushableChannel<number>(() => void 0)
+    expect(chan.isClosed()).toEqual(false)
+
+    const result = lastValueFrom(from(chan))
+
+    expect(chan.isClosed()).toEqual(false)
+    chan.close()
+    expect(chan.isClosed()).toEqual(true)
+
+    await expect(() => result).rejects.toMatchObject({ message: 'no elements in sequence' })
+  })
+
   it("close the channel with failAndClose should make the iterator fail", async () => {
     const chan = pushableChannel<number>(() => void 0)
-
+    const push = promisify(chan.push)
     expect(chan.isClosed()).toEqual(false)
 
     let values: number[] = []
 
     expect(chan.isClosed()).toEqual(false)
 
-    setTimeout(() => chan.push(1).then(() => chan.failAndClose(new Error("safe"))), 10)
+    setImmediate(() => { push(1).then(() => chan.failAndClose(new Error("safe"))) })
 
     await expect(async () => {
       for await (const val of chan) {
@@ -191,6 +348,7 @@ describe.only("push channel", () => {
 
   it("generator yield basic case", async () => {
     let chan = pushableChannel<number>(() => void 0)
+    const push = promisify(chan.push)
     let values: number[] = []
 
     async function* generator() {
@@ -202,9 +360,9 @@ describe.only("push channel", () => {
     }
 
     setTimeout(async () => {
-      await chan.push(1)
-      await chan.push(2)
-      await chan.push(3)
+      await push(1)
+      await push(2)
+      await push(3)
     }, 10)
 
     expect(chan.isClosed()).toEqual(false)

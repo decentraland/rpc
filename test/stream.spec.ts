@@ -33,7 +33,6 @@ async function testPort(rpcClient: RpcClient, portName: string) {
 
 describe("Helpers simple req/res", () => {
   let remoteCallCounter = 0
-  const events = mitt<{ a: Uint8Array }>()
   let channel: ReturnType<typeof pushableChannel>
   const testEnv = createSimpleTestEnvironment(async function (port) {
     log(`! Initializing port ${port.portId} ${port.portName}`)
@@ -60,21 +59,9 @@ describe("Helpers simple req/res", () => {
           yield new Uint8Array([counter % 0xff])
         }
       },
-      async *manualHackWithPushableChannel() {
-        channel = pushableChannel<Uint8Array>(() => deferCloseChannel)
-        // subscribe to room message
-        events.on("a", channel.push)
-        // forward all messages
-        for await (const message of channel) {
-          yield message as Uint8Array
-        }
-
-        // then close the channel
-        channel.close()
-
-        function deferCloseChannel() {
-          events.off("a", channel.push)
-        }
+      manualHackWithPushableChannel() {
+        channel = pushableChannel<Uint8Array>(() => void 0)
+        return channel.iterable as AsyncGenerator<Uint8Array>
       },
       async *parameterCounter(data) {
         let total = data[0]
@@ -142,19 +129,16 @@ describe("Helpers simple req/res", () => {
     const values: Uint8Array[] = []
     const FINAL_RESULT = new Uint8Array([1, 2, 3])
 
-    let localCallCounter = 0
+    const generator = (await module.infiniteCounter())[Symbol.asyncIterator]()
+
     remoteCallCounter = 0
-    await expect(async () => {
-      for await (const u8a of await module.infiniteCounter()) {
-        values.push(u8a)
-        localCallCounter++
-        if (localCallCounter == FINAL_RESULT.length) throw new Error("closed locally")
-      }
-    }).rejects.toThrow("closed locally")
+
+    values.push(await (await generator.next()).value)
+    values.push(await (await generator.next()).value)
+    values.push(await (await generator.next()).value)
+    await generator.throw(new Error("closed locally"))
 
     expect(new Uint8Array(Buffer.concat(values))).toEqual(FINAL_RESULT)
-
-    expect(remoteCallCounter).toEqual(localCallCounter)
   })
 
   it("a remote infiniteCounter is gracefully stopped from client side on third iteration", async () => {
@@ -205,28 +189,19 @@ describe("Helpers simple req/res", () => {
     expect(remoteCallCounter).toEqual(localCallCounter)
   })
 
-  it("a remote manualHackWithPushableChannel is gracefully stopped from client side on third iteration", async () => {
+  it("a remote manualHackWithPushableChannel is gracefully stopped from client side", async () => {
     const { rpcClient } = await testEnv.start()
     const port = await rpcClient.createPort("test1")
     const module = (await port.loadModule("echo")) as {
       manualHackWithPushableChannel(): Promise<AsyncGenerator<Uint8Array>>
     }
 
-    async function test() {
-      for await (const u8a of await module.manualHackWithPushableChannel()) {
-        expect(channel.isClosed()).toEqual(false)
-        return u8a
-      }
-    }
+    const gen = (await module.manualHackWithPushableChannel())[Symbol.asyncIterator]()
 
-    const ret = test()
+    expect(channel.isClosed()).toEqual(false)
 
-    await delay(100)
+    await gen.return(null)
 
-    events.emit("a", new Uint8Array([1]))
-    expect(await ret).toEqual(new Uint8Array([1]))
-
-    await delay(100)
     expect(channel.isClosed()).toEqual(true)
   })
 })

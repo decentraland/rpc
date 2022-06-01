@@ -65,7 +65,16 @@ export function createSimpleTestEnvironment<Context = void>(
   options: CreateRpcServerOptions<Context> = {}
 ) {
   async function start(context: Context, transportOptions?: MemoryTransportOptions) {
-    const memoryTransport = MemoryTransport(transportOptions)
+    const memoryTransport = MemoryTransport({
+      decouplingFunction: (cb) => {
+        if (process.env.SIMMULATE_JITTER === 'true') {
+          setTimeout(cb, Math.random() * 10)
+        } else {
+          cb()
+        }
+      },
+      ...transportOptions
+    })
     instrumentMemoryTransports(memoryTransport)
 
     const rpcServer = createRpcServer(options)

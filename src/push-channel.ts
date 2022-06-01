@@ -1,12 +1,71 @@
-export function pushableChannel<T>(onIteratorClose: () => void) {
-  type LastResolver = () => void
-  type ListItem = { value: T; resolve: LastResolver; prev?: ListItem }
+type Node<T> = { value: T; resolve?: LastResolver; prev?: Node<T>, next?: Node<T> }
+type LastResolver = (err?: any) => void
 
+export function linkedList<T>() {
+  let head: Node<T> | undefined = undefined
+  let tail: Node<T> | undefined = undefined
+
+  function push(value: T, resolve?: LastResolver) {
+    const node: Node<T> = {
+      value,
+      resolve,
+    }
+    node.prev = tail;
+    if (tail) {
+      tail.next = node;
+    }
+    if (!head) {
+      head = node;
+    }
+    tail = node;
+  }
+
+  function remove(node: Node<T>): void {
+    if (!node.next) {
+      tail = node.prev;
+    } else {
+      const nextNode = node.next;
+      nextNode.prev = node.prev;
+    }
+    if (!node.prev) {
+      head = node.next;
+    } else {
+      const prevNode = node.prev;
+      prevNode.next = node.next;
+    }
+  }
+
+  // removes the head node and updates the head
+  function unshift(): Node<T> | undefined {
+    const ret = head
+    if (ret) remove(ret)
+    return ret
+  }
+
+  // signals if the list is empty
+  function isEmpty(): boolean {
+    return !head
+  }
+
+  return { push, unshift, isEmpty }
+}
+
+
+export function pushableChannel<T>(onIteratorClose: () => void) {
   let returnLock: (() => void) | null = null
-  const queue: ListItem[] = []
+  const queue = linkedList<T>()
   let closed = false
   let error: Error | null = null
-  let lastResolver: LastResolver | null = null
+
+  function closeAllPending() {
+    if (!queue.isEmpty()) {
+      const err = error || new Error("Channel was closed before deliverying the message")
+      while (!queue.isEmpty()) {
+        const { resolve } = queue.unshift()!
+        if (resolve) resolve(err);
+      }
+    }
+  }
 
   function releaseLockIfNeeded() {
     // signal that we have a value
@@ -17,24 +76,18 @@ export function pushableChannel<T>(onIteratorClose: () => void) {
     }
   }
 
-  async function push(value: T) {
-    if (closed) throw new Error("Channel is closed")
+  function push(value: T, callback: (err?: any) => void) {
+    if (closed) {
+      callback(new Error("Channel is closed"))
+      return
+    }
     if (error) {
-      throw error
+      callback(error)
+      return
     }
     // push the value to the queue
-    return new Promise<void>((resolve) => {
-      queue.push({ value, resolve })
-      releaseLockIfNeeded()
-    })
-  }
-
-  // resolves the promise returned by push(T)
-  function markConsumed() {
-    if (lastResolver) {
-      lastResolver()
-      lastResolver = null
-    }
+    queue.push(value, callback)
+    releaseLockIfNeeded()
   }
 
   function failAndClose(errorToThrow: Error) {
@@ -43,29 +96,24 @@ export function pushableChannel<T>(onIteratorClose: () => void) {
   }
 
   function yieldNextResult(): IteratorResult<T> | void {
-    if (error && queue.length == 0) {
+    if (error && queue.isEmpty()) {
       throw error
     }
-    if (closed && queue.length == 0) {
+    if (closed && queue.isEmpty()) {
       return { done: true, value: undefined }
     }
-    if (queue.length) {
-      if (lastResolver) {
-        throw new Error("logic error, this should never happen")
-      }
-
-      const { value, resolve } = queue.shift()!
-      lastResolver = resolve
+    if (!queue.isEmpty()) {
+      const node = queue.unshift()!
+      if (node.resolve) node.resolve()
       return {
         done: false,
-        value,
+        value: node.value,
       }
     }
   }
 
   function close() {
     if (!closed) {
-      markConsumed()
       closed = true
       releaseLockIfNeeded()
       onIteratorClose()
@@ -76,7 +124,6 @@ export function pushableChannel<T>(onIteratorClose: () => void) {
     async next() {
       while (true) {
         try {
-          markConsumed()
           const result = yieldNextResult()
           if (result) {
             return result
@@ -92,6 +139,7 @@ export function pushableChannel<T>(onIteratorClose: () => void) {
     },
     async return(value) {
       close()
+      closeAllPending()
       return { done: true, value: undefined }
     },
     async throw(e) {
@@ -99,6 +147,7 @@ export function pushableChannel<T>(onIteratorClose: () => void) {
         throw error
       }
       close()
+      closeAllPending()
       return { done: true, value: undefined }
     },
     [Symbol.asyncIterator]() {
