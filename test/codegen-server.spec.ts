@@ -77,9 +77,9 @@ describe("codegen client & server", () => {
         const ret: AsyncGenerator<AlmostEmpty> = {
           [Symbol.asyncIterator]: () => ret,
           async next() {
-            infiniteGeneratorEmited++
             // hang in 4th iteration
             if (infiniteGeneratorEmited == 4) await closeFuture
+            infiniteGeneratorEmited++
             return { value: { int: infiniteGeneratorEmited } }
           },
           async return() {
@@ -115,8 +115,7 @@ describe("codegen client & server", () => {
   let service: codegen.RpcClientModule<BookServiceDefinition>
 
   beforeAll(async () => {
-    const { rpcClient } = await testEnv.start(null, {
-    })
+    const { rpcClient } = await testEnv.start()
 
     const clientPort = await rpcClient.createPort("test1")
     service = codegen.loadService(clientPort, BookServiceDefinition)
@@ -205,21 +204,6 @@ describe("codegen client & server", () => {
     await expect(() => takeAsync(service.queryBooks({ authorPrefix: "fail_before_end" }))).rejects.toThrowError(
       "RemoteError: fail_before_end"
     )
-  })
-
-  it("when streams are materialized, the first element should be sended to start the ACK chains", async () => {
-    infiniteGeneratorClosed = 0
-    infiniteGeneratorEmited = 0
-    closeFuture = future()
-
-    const gen = service.infiniteGenerator({})
-
-    await gen.return(null)
-    // give it time to end and send async messages
-    await delay(100)
-
-    expect(infiniteGeneratorEmited).toEqual(1)
-    expect(infiniteGeneratorClosed).toEqual(1)
   })
 
   it("infinite stream take vanilla 1", async () => {
@@ -329,6 +313,7 @@ describe("codegen client & server", () => {
       { int: 1 },
       { int: 2 },
       { int: 3 },
+      { int: 4 },
     ])
     expect(infiniteGeneratorEmited).toEqual(4)
     expect(infiniteGeneratorClosed).toEqual(1)
@@ -348,12 +333,12 @@ describe("codegen client & server", () => {
 
     await delay(100)
 
-    expect(infiniteGeneratorEmited).toEqual(3)
-    expect(infiniteGeneratorClosed).toEqual(1)
     expect(values).toEqual([
       { int: 1 },
       { int: 2 },
       { int: 3 },
     ])
+    expect(infiniteGeneratorEmited).toEqual(3)
+    expect(infiniteGeneratorClosed).toEqual(1)
   })
 })

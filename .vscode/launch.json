@@ -35,8 +35,7 @@
         "${workspaceRoot}/node_modules/.bin/jest",
         "--runInBand",
         "--coverage",
-        "-t",
-        "manualHackWithPushableChannel"
+        "test/push-channel.spec.ts"
       ],
       "console": "integratedTerminal",
       "internalConsoleOptions": "neverOpen",

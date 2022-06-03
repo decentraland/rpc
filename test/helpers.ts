@@ -2,7 +2,6 @@ import {
   createRpcClient,
   createRpcServer,
   CreateRpcServerOptions,
-  RpcClient,
   RpcServerHandler,
   Transport,
 } from "../src"
@@ -19,7 +18,7 @@ export async function takeAsync<T>(iter: AsyncGenerator<T>, max?: number) {
   for await (const $ of iter) {
     r.push($)
     counter++
-    if (typeof max == "number" && counter == max) break
+    if (counter === max) break
   }
   return r
 }
@@ -31,7 +30,7 @@ function serialize(data: Uint8Array) {
 }
 
 export function instrumentTransport(transport: Transport, name: string) {
-  if (typeof it == "function") {
+  if (typeof it == "function" && process.env.INSTRUMENT_TRANSPORT) {
     transport.on("close", (data) => {
       log(`  (${name}): closed`)
     })
@@ -99,7 +98,7 @@ export function createSimpleTestEnvironment<Context = void>(
   }
 
   return {
-    start,
+    start
   }
 }
 

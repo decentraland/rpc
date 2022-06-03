@@ -50,27 +50,23 @@ export function clientProcedureStream<Request, Response>(
       return _generator!
     }
 
-    function generateResult(): AsyncGenerator<Response> {
-      const ret: AsyncGenerator<Response> = {
-        [Symbol.asyncIterator]: () => generateResult(),
-        async next() {
-          const iter = await (await getGenerator()).next()
-          return { value: method.responseType.decode(iter.value ?? EMPTY_U8ARRAY), done: iter.done }
-        },
-        async return(value) {
-          const iter = await (await getGenerator()).return(value)
-          return { value: method.responseType.decode(iter.value ?? EMPTY_U8ARRAY), done: iter.done }
-        },
-        async throw(value) {
-          const iter = await (await getGenerator()).throw(value)
-          return { value: method.responseType.decode(iter.value ?? EMPTY_U8ARRAY), done: iter.done }
-        }
+    const ret: AsyncGenerator<Response> = {
+      [Symbol.asyncIterator]: () => ret,
+      async next() {
+        const iter = await (await getGenerator()).next()
+        return { value: method.responseType.decode(iter.value ?? EMPTY_U8ARRAY), done: iter.done }
+      },
+      async return(value) {
+        const iter = await (await getGenerator()).return(value)
+        return { value: iter.value ? method.responseType.decode(iter.value) : iter.value, done: iter.done }
+      },
+      async throw(value) {
+        const iter = await (await getGenerator()).throw(value)
+        return { value: iter.value ? method.responseType.decode(iter.value) : iter.value, done: iter.done }
       }
-
-      return ret
     }
 
-    return generateResult()
+    return ret
   }
 
   return fn

@@ -13,9 +13,15 @@ export function createAckHelper(transport: Transport): AckDispatcher {
 
   const bb = new Writer()
 
-  transport.on("close", () => {
+  function closeAll() {
     const err = new Error("Transport closed while waiting the ACK")
-    oneTimeCallbacks.forEach(([_resolve, reject]) => reject(err))
+    oneTimeCallbacks.forEach(([, reject]) => reject(err))
+    oneTimeCallbacks.clear()
+  }
+
+  transport.on("close", closeAll)
+  transport.on("error", err => {
+    oneTimeCallbacks.forEach(([, reject]) => reject(err))
     oneTimeCallbacks.clear()
   })
 
@@ -26,6 +32,8 @@ export function createAckHelper(transport: Transport): AckDispatcher {
       if (fut) {
         oneTimeCallbacks.delete(key)
         fut[0](data)
+      } else {
+        throw new Error('Received a message for an inexistent handler ' + key)
       }
     },
     async sendWithAck(data: StreamMessage): Promise<StreamMessage> {

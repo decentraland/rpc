@@ -33,7 +33,6 @@ export function WebWorkerTransport(worker: IWorker): Transport {
     if (message.data instanceof ArrayBuffer) {
       events.emit("message", message.data)
     } else {
-      debugger
       throw new Error(`WebWorkerTransport: Received unknown type of message, expecting Uint8Array`)
     }
   })
