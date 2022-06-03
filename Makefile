@@ -67,7 +67,7 @@ cheap-perf:
 
 inspect:
 	node_modules/.bin/tsc -p test/benchmarks/tsconfig.json
-	node --inspect-brk test/benchmarks/compiled/test/benchmarks/bench.js
+	node --inspect-brk test/benchmarks/compiled/test/benchmarks/allocation-bench.js
 
 integration-example:
 	@cd example; ./build.sh
