@@ -1,6 +1,7 @@
 import { CallableProcedureClient, ClientModuleDefinition, RpcClient, RpcClientPort, RpcPortEvents } from "."
 import { Transport } from "./types"
 import mitt from "mitt"
+import future, { IFuture } from "fp-future"
 import { Writer } from "protobufjs/minimal"
 import {
   CreatePort,
@@ -15,7 +16,7 @@ import {
   StreamMessage,
 } from "./protocol"
 import { MessageDispatcher, messageNumberHandler } from "./message-number-handler"
-import { pushableChannel } from "./push-channel"
+import { AsyncQueue, linkedList, pushableChannel } from "./push-channel"
 import {
   calculateMessageIdentifier,
   closeStreamMessage,
@@ -91,51 +92,74 @@ function throwIfRemoteError(parsedMessage: RemoteError) {
   throw new Error("RemoteError: " + parsedMessage.errorMessage)
 }
 
-// @internal
+
+/**
+ * If a StreamMessage is received, then it means we have the POSSIBILITY to
+ * consume a remote generator. The client must answer every ACK with the next
+ * inteded action, could be: next(), close(). Both actions are serialized in the
+ * StreamMessage. The server MUST NOT generate any new element of the generator
+ * if the client doesn't ask for it.
+ *
+ * The whole protocol is designed to be SLOW AND SECURE, that means, ACKs (slow)
+ * will block the generation and consumption of iterators (secure).
+ *
+ * That exist to save the memory of the servers and to generate the much needed
+ * backpressure.
+ *
+ * If throughput is what you are looking for, you may better use bigger messages
+ * containing serialized lists. Effectively reducing the number of messages
+ * and increasing their size.
+ *
+ * @internal
+ */
 export function streamFromDispatcher(
   dispatcher: MessageDispatcher,
   streamMessage: StreamMessage,
   messageNumber: number
 ): AsyncGenerator<Uint8Array> {
-  const channel = pushableChannel<Uint8Array>(localIteratorClosed)
-
   let lastReceivedSequenceId = 0
   let isRemoteClosed = false
 
+  const channel = new AsyncQueue<Uint8Array>(sendServerSignals)
+
   dispatcher.transport.on("close", () => {
-    if (!channel.isClosed()) {
-      channel.failAndClose(new Error("RPC Transport closed"))
-    }
+    channel.close(new Error("RPC Transport closed"))
   })
 
   dispatcher.transport.on("error", () => {
-    if (!channel.isClosed()) {
-      channel.failAndClose(new Error("RPC Transport failed"))
-    }
+    channel.close(new Error("RPC Transport failed"))
   })
 
-  function localIteratorClosed() {
+  // This function is called at two moments
+  // 1. When the channel is closed or fails -> an ACK closing the stream is sent to the server
+  // 2. When the channel.next() is called   -> an ACK requesting the next elem is sent to the server
+  function sendServerSignals(_channel: AsyncQueue<Uint8Array>, action: "close" | "next") {
+    if (action == "close") {
+      dispatcher.removeListener(messageNumber)
+    }
     if (!isRemoteClosed) {
-      dispatcher.transport.sendMessage(closeStreamMessage(messageNumber, lastReceivedSequenceId, streamMessage.portId))
-    }
-    dispatcher.removeListener(messageNumber)
-  }
-
-  function sendAck() {
-    const closed = channel.isClosed()
-    if (!closed && !isRemoteClosed) {
-      dispatcher.transport.sendMessage(streamAckMessage(messageNumber, lastReceivedSequenceId, streamMessage.portId))
+      if (action == "close") {
+        dispatcher.transport.sendMessage(closeStreamMessage(messageNumber, lastReceivedSequenceId, streamMessage.portId))
+      } else if (action == "next") {
+        dispatcher.transport.sendMessage(streamAckMessage(messageNumber, lastReceivedSequenceId, streamMessage.portId))
+      }
     }
   }
 
+  // receive a message from the server and send it to the iterable channel
   function processMessage(message: StreamMessage) {
     lastReceivedSequenceId = message.sequenceId
 
     if (message.closed) {
+      // when the server CLOSES the stream, then we raise the flag isRemoteClosed
+      // to prevent sending an extra closeStreamMessage to the server after closing
+      // our channel.
+      // IMPORTANT: If the server closes the connection, then we DONT send the ACK
+      //            back to the server because it is redundant information.
       isRemoteClosed = true
       channel.close()
     } else {
-      channel.push(message.payload).then(sendAck).catch(channel.failAndClose)
+      channel.enqueue(message.payload)
     }
   }
 
@@ -148,20 +172,18 @@ export function streamFromDispatcher(
         processMessage(message)
       } else if (messageType == RpcMessageTypes.RpcMessageTypes_REMOTE_ERROR_RESPONSE) {
         isRemoteClosed = true
-        channel.failAndClose(
+        channel.close(
           new Error("RemoteError: " + ((message as RemoteError).errorMessage || "Unknown remote error"))
         )
       } else {
-        channel.failAndClose(new Error("RemoteError: Protocol error"))
+        channel.close(new Error("RemoteError: Protocol error"))
       }
     } else {
-      channel.failAndClose(new Error("RemoteError: Protocol error"))
+      channel.close(new Error("RemoteError: Protocol error"))
     }
   })
 
-  processMessage(streamMessage)
-
-  return channel.iterable
+  return channel
 }
 
 // @internal
@@ -199,10 +221,12 @@ function createProcedure(portId: number, procedureId: number, dispatcher: Messag
           return undefined
         }
       } else if (messageType == RpcMessageTypes.RpcMessageTypes_STREAM_MESSAGE) {
+        // If a StreamMessage is received, then it means we have the POSSIBILITY
+        // to consume a remote generator. Look into the streamFromDispatcher functions
+        // for more information.
         return streamFromDispatcher(dispatcher, message, messageNumber)
       } else if (messageType == RpcMessageTypes.RpcMessageTypes_REMOTE_ERROR_RESPONSE) {
         throwIfRemoteError(message)
-        debugger
       }
     }
   }

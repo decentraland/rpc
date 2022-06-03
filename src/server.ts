@@ -237,6 +237,56 @@ export async function handleDestroyPort(
 }
 
 // @internal
+export async function sendStream(ackDispatcher: AckDispatcher, transport: Transport, stream: AsyncGenerator<Uint8Array>, portId: number, messageNumber: number) {
+  let sequenceNumber = 0
+
+  const reusedStreamMessage: StreamMessage = StreamMessage.fromJSON({
+    closed: false,
+    ack: false,
+    sequenceId: sequenceNumber,
+    messageIdentifier: calculateMessageIdentifier(
+      RpcMessageTypes.RpcMessageTypes_STREAM_MESSAGE,
+      messageNumber
+    ),
+    payload: EMPTY_U8A,
+    portId: portId,
+  })
+
+  // First, tell the client that we are opening a stream. Once the client sends
+  // an ACK, we will know if they are ready to consume the first element.
+  // If the response is instead close=true, then this function returns and
+  // no stream.next() is called
+  // The following lines are called "stream offer" in the tests.
+  const ret = await ackDispatcher.sendWithAck(reusedStreamMessage)
+  if (ret.closed) return
+  if (!ret.ack) throw new Error('Error in logic, ACK must be true')
+
+  // If this point is reached, then the client WANTS to consume an element of the
+  // generator
+  for await (const elem of stream) {
+    sequenceNumber++
+    reusedStreamMessage.sequenceId = sequenceNumber
+    reusedStreamMessage.payload = elem
+
+    // sendWithAck may fail if the transport is closed, effectively ending this
+    // iterator and the underlying generator. (by exiting this for-await-of)
+    // Aditionally, the ack message is used to know WHETHER the client wants to
+    // generate another element or cancel the iterator by setting closed=true
+    const ret = await ackDispatcher.sendWithAck(reusedStreamMessage)
+
+    // we first check for ACK because it is the hot-code-path
+    if (ret.ack) {
+      continue
+    } else if (ret.closed) {
+      // if it was closed remotely, then we end the stream right away
+      return
+    }
+  }
+
+  transport.sendMessage(closeStreamMessage(messageNumber, sequenceNumber, portId))
+}
+
+// @internal
 export async function handleRequest<Context>(
   ackDispatcher: AckDispatcher,
   request: Request,
@@ -276,42 +326,7 @@ export async function handleRequest<Context>(
     Response.encode(response, unsafeSyncWriter)
     transport.sendMessage(unsafeSyncWriter.finish())
   } else if (result && Symbol.asyncIterator in result) {
-    const iter: AsyncGenerator<Uint8Array> = await (result as any)[Symbol.asyncIterator]()
-    let sequenceNumber = -1
-
-    const reusedStreamMessage: StreamMessage = StreamMessage.fromJSON({
-      closed: false,
-      ack: false,
-      sequenceId: 0,
-      messageIdentifier: 0,
-      payload: EMPTY_U8A,
-      portId: request.portId,
-    })
-
-    for await (const elem of iter) {
-      sequenceNumber++
-      reusedStreamMessage.closed = false
-      reusedStreamMessage.ack = false
-      reusedStreamMessage.sequenceId = sequenceNumber
-      reusedStreamMessage.messageIdentifier = calculateMessageIdentifier(
-        RpcMessageTypes.RpcMessageTypes_STREAM_MESSAGE,
-        messageNumber
-      )
-      reusedStreamMessage.payload = elem
-      reusedStreamMessage.portId = request.portId
-
-      // sendWithAck may fail if the transport is closed, effectively
-      // ending this iterator.
-      const ret = await ackDispatcher.sendWithAck(reusedStreamMessage)
-
-      if (ret.ack) {
-        continue
-      } else if (ret.closed) {
-        // if it was closed remotely, then we end the stream right away
-        return
-      }
-    }
-    transport.sendMessage(closeStreamMessage(messageNumber, sequenceNumber, request.portId))
+    await sendStream(ackDispatcher, transport, result, port.portId, messageNumber)
   } else {
     unsafeSyncWriter.reset()
     Response.encode(response, unsafeSyncWriter)
@@ -377,7 +392,7 @@ export function createRpcServer<Context = {}>(options: CreateRpcServerOptions<Co
       messageType == RpcMessageTypes.RpcMessageTypes_STREAM_ACK ||
       messageType == RpcMessageTypes.RpcMessageTypes_STREAM_MESSAGE
     ) {
-      await ackHelper.receiveAck(parsedMessage, messageNumber)
+      ackHelper.receiveAck(parsedMessage, messageNumber)
     } else {
       transport.emit(
         "error",

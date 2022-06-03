@@ -35,7 +35,7 @@
         "${workspaceRoot}/node_modules/.bin/jest",
         "--runInBand",
         "--coverage",
-        // "test/ws.spec.ts"
+        "test/push-channel.spec.ts"
       ],
       "console": "integratedTerminal",
       "internalConsoleOptions": "neverOpen",

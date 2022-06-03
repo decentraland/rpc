@@ -39,11 +39,12 @@ test:
 		--ts_proto_out="$(PWD)/test/codegen" \
 		-I="$(PWD)/test/codegen" \
 		"$(PWD)/test/codegen/client.proto"
-	node_modules/.bin/jest --detectOpenHandles --colors --runInBand $(TESTARGS) --coverage $(TEST_FILE)
+	SIMMULATE_JITTER=false node_modules/.bin/jest --detectOpenHandles --colors --runInBand $(TESTARGS) --coverage $(TEST_FILE)
+	SIMMULATE_JITTER=true node_modules/.bin/jest --detectOpenHandles --colors --runInBand $(TESTARGS) $(TEST_FILE)
 	$(MAKE) integration-example
 
 test-watch:
-	node_modules/.bin/jest --detectOpenHandles --colors --runInBand --watch $(TESTARGS) --coverage
+	INSTRUMENT_TRANSPORT=true node_modules/.bin/jest --detectOpenHandles --colors --runInBand --watch $(TESTARGS) --coverage
 
 build:
 	node_modules/.bin/ts-node scripts/generate-proto-file.ts
@@ -66,7 +67,7 @@ cheap-perf:
 
 inspect:
 	node_modules/.bin/tsc -p test/benchmarks/tsconfig.json
-	node --inspect-brk test/benchmarks/compilated/test/benchmarks/bench.js
+	node --inspect-brk test/benchmarks/compiled/test/benchmarks/allocation-bench.js
 
 integration-example:
 	@cd example; ./build.sh

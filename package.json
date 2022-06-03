@@ -28,6 +28,7 @@
     "@types/jest": "^27.0.1",
     "@types/ws": "^8.5.3",
     "benchmark": "^2.1.4",
+    "fp-future": "^1.0.1",
     "jest": "^27.0.6",
     "rxjs": "^7.5.5",
     "ts-jest": "^27.0.5",

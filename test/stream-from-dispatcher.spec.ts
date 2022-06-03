@@ -6,120 +6,96 @@ import { instrumentMemoryTransports, takeAsync } from "./helpers"
 import { StreamMessage } from "../src/protocol"
 
 describe("streamFromDispatcher", () => {
-  it("a CloseMessage from the server closes the iterator in the client", async () => {
+  it("a CloseMessage from the server closes the iterator in the client.", async () => {
     let seq = 0
     const MESSAGE_NUMBER = 1
+    const PORT_ID = 0
     const transport = instrumentMemoryTransports(MemoryTransport())
     const dispatcher = messageNumberHandler(transport.client)
     const removeListenerSpy = jest.spyOn(dispatcher, "removeListener")
-    const stream = streamFromDispatcher(
+
+    // create a client stream for the server
+    const clientStream = streamFromDispatcher(
       dispatcher,
-      StreamMessage.decode(streamMessage(MESSAGE_NUMBER, seq++, 0, new Uint8Array())),
+      StreamMessage.decode(streamMessage(MESSAGE_NUMBER, seq++, PORT_ID, Uint8Array.of())),
       MESSAGE_NUMBER
     )
 
-    setTimeout(() => transport.server.sendMessage(closeStreamMessage(MESSAGE_NUMBER, seq++, 0)), 10)
+    // server sends CLOSE message
+    setImmediate(() => transport.server.sendMessage(closeStreamMessage(MESSAGE_NUMBER, seq++, PORT_ID)))
 
-    const allMessages = await takeAsync(stream)
-    expect(allMessages).toEqual([new Uint8Array()])
+    // consume all stream
+    const allMessages = await takeAsync(clientStream)
+
+    // yields empty array
+    expect(allMessages).toEqual([])
+
+    // and the listener should have been cleared
     expect(removeListenerSpy).toHaveBeenCalledWith(MESSAGE_NUMBER)
   })
 
   it("a CloseMessage from the server closes the iterator in the client after yielding data SYNC", async () => {
     let seq = 0
     const MESSAGE_NUMBER = 2
+    const PORT_ID = 0
     const PAYLOAD = Uint8Array.from([0xde, 0xad])
     const transport = instrumentMemoryTransports(MemoryTransport())
     const dispatcher = messageNumberHandler(transport.client)
     const removeListenerSpy = jest.spyOn(dispatcher, "removeListener")
     const addListenerSpy = jest.spyOn(dispatcher, "addListener")
-    const stream = streamFromDispatcher(
+
+    // create a client stream for the server
+    const clientStream = streamFromDispatcher(
       dispatcher,
-      StreamMessage.decode(streamMessage(MESSAGE_NUMBER, seq++, 0, new Uint8Array())),
+      StreamMessage.decode(streamMessage(MESSAGE_NUMBER, seq++, PORT_ID, Uint8Array.of())),
       MESSAGE_NUMBER
     )
 
+    // it should have registered the listener
     expect(addListenerSpy).toHaveBeenCalledWith(MESSAGE_NUMBER, expect.anything())
 
-    transport.server.sendMessage(streamMessage(MESSAGE_NUMBER, seq++, 0, PAYLOAD))
-    transport.server.sendMessage(closeStreamMessage(MESSAGE_NUMBER, seq++, 0))
-    expect(removeListenerSpy).toHaveBeenCalledWith(MESSAGE_NUMBER)
+    // ask the server for the .next() value
+    const futureValue = clientStream.next()
 
-    const allMessages = await takeAsync(stream)
-    expect(allMessages).toEqual([new Uint8Array(), PAYLOAD])
+    // server sends .next()
+    transport.server.sendMessage(streamMessage(MESSAGE_NUMBER, seq++, PORT_ID, PAYLOAD))
+
+    // server closes transport
+    transport.server.sendMessage(closeStreamMessage(MESSAGE_NUMBER, seq++, PORT_ID))
+
+    // and since we consumed only one element from the stream, our entire materialized
+    // messages should only contain that
+    expect((await futureValue).value).toEqual(PAYLOAD)
+
+    expect((await clientStream.next()).done).toEqual(true)
+
+    // the listener should have been cleared
+    expect(removeListenerSpy).toHaveBeenCalledWith(MESSAGE_NUMBER)
   })
 
   it("a CloseMessage from the server closes the iterator in the client after yielding data", async () => {
     let seq = 0
     const MESSAGE_NUMBER = 2
+    const PORT_ID = 0
     const PAYLOAD = Uint8Array.from([0xde, 0xad])
     const transport = instrumentMemoryTransports(MemoryTransport())
     const dispatcher = messageNumberHandler(transport.client)
-    const stream = streamFromDispatcher(
+
+    // create a client stream for the server
+    const clientStream = streamFromDispatcher(
       dispatcher,
-      StreamMessage.decode(streamMessage(MESSAGE_NUMBER, seq++, 0, new Uint8Array())),
+      StreamMessage.decode(streamMessage(MESSAGE_NUMBER, seq++, PORT_ID, new Uint8Array())),
       MESSAGE_NUMBER
     )
 
-    setTimeout(() => {
-      transport.server.sendMessage(streamMessage(MESSAGE_NUMBER, seq++, 0, PAYLOAD))
-      transport.server.sendMessage(closeStreamMessage(MESSAGE_NUMBER, seq++, 0))
-    }, 10)
+    // server sends a message and then closes the stream
+    setImmediate(() => {
+      transport.server.sendMessage(streamMessage(MESSAGE_NUMBER, seq++, PORT_ID, PAYLOAD))
+      transport.server.sendMessage(closeStreamMessage(MESSAGE_NUMBER, seq++, PORT_ID))
+    })
 
-    const allMessages = await takeAsync(stream)
-    expect(allMessages).toEqual([new Uint8Array(), PAYLOAD])
-  })
-
-  it("a StreamMessage with payload yields its result concurrently", async () => {
-    const MESSAGE_NUMBER = 3
-    const PAYLOAD = Uint8Array.from([132])
-    const transport = instrumentMemoryTransports(MemoryTransport())
-    const dispatcher = messageNumberHandler(transport.client)
-    const stream = streamFromDispatcher(
-      dispatcher,
-      StreamMessage.decode(streamMessage(MESSAGE_NUMBER, 0, 0, PAYLOAD)),
-      MESSAGE_NUMBER
-    )
-
-    const [_, allMessages] = await Promise.all([
-      transport.server.sendMessage(closeStreamMessage(MESSAGE_NUMBER, 0, 0)),
-      takeAsync(stream),
-    ])
-
-    expect(allMessages).toEqual([PAYLOAD])
-  })
-
-  it("a StreamMessage with payload yields its result", async () => {
-    let seq = 0
-    const MESSAGE_NUMBER = 3
-    const PAYLOAD = Uint8Array.from([133])
-    const transport = instrumentMemoryTransports(MemoryTransport())
-    const dispatcher = messageNumberHandler(transport.client)
-    const stream = streamFromDispatcher(
-      dispatcher,
-      StreamMessage.decode(streamMessage(MESSAGE_NUMBER, seq++, 0, PAYLOAD)),
-      MESSAGE_NUMBER
-    )
-
-    setTimeout(() => transport.server.sendMessage(closeStreamMessage(MESSAGE_NUMBER, seq++, 0)), 10)
-
-    const allMessages = await takeAsync(stream)
-    expect(allMessages).toEqual([PAYLOAD])
-  })
-
-  it("a StreamMessage with payload yields its result with closeMessage received before consuming stream", async () => {
-    let seq = 0
-    const MESSAGE_NUMBER = 3
-    const PAYLOAD = Uint8Array.from([133])
-    const transport = instrumentMemoryTransports(MemoryTransport())
-    const dispatcher = messageNumberHandler(transport.client)
-    const stream = streamFromDispatcher(
-      dispatcher,
-      StreamMessage.decode(streamMessage(MESSAGE_NUMBER, seq++, 0, PAYLOAD)),
-      MESSAGE_NUMBER
-    )
-    transport.server.sendMessage(closeStreamMessage(MESSAGE_NUMBER, seq++, 0))
-    const allMessages = await takeAsync(stream)
+    // client consumes one message and then finishes the iterator
+    const allMessages = await takeAsync(clientStream)
     expect(allMessages).toEqual([PAYLOAD])
   })
 
@@ -128,60 +104,73 @@ describe("streamFromDispatcher", () => {
     const MESSAGE_NUMBER = 4
     const transport = instrumentMemoryTransports(MemoryTransport())
     const dispatcher = messageNumberHandler(transport.client)
-    const stream = streamFromDispatcher(
+    const clientStream = streamFromDispatcher(
       dispatcher,
-      StreamMessage.decode(streamMessage(MESSAGE_NUMBER, seq++, 0, Uint8Array.from([1]))),
+      StreamMessage.decode(streamMessage(MESSAGE_NUMBER, seq++, 0, Uint8Array.of())),
       MESSAGE_NUMBER
     )
 
+    // send three messages and then close the stream
     transport.server.sendMessage(streamMessage(MESSAGE_NUMBER, seq++, 0, Uint8Array.from([2])))
     transport.server.sendMessage(streamMessage(MESSAGE_NUMBER, seq++, 0, Uint8Array.from([3])))
     transport.server.sendMessage(streamMessage(MESSAGE_NUMBER, seq++, 0, Uint8Array.from([4])))
     transport.server.sendMessage(closeStreamMessage(MESSAGE_NUMBER, seq++, 0))
 
-    const values = await takeAsync(stream)
+    const values = await takeAsync(clientStream)
 
-    expect(values).toEqual([Uint8Array.from([1]), Uint8Array.from([2]), Uint8Array.from([3]), Uint8Array.from([4])])
+    expect(values).toEqual([Uint8Array.from([2]), Uint8Array.from([3]), Uint8Array.from([4])])
   })
 
-  it("Consume partial stream", async () => {
+  it("closed streams", async () => {
     let seq = 0
     const MESSAGE_NUMBER = 4
+    const PORT_ID = 0
     const transport = instrumentMemoryTransports(MemoryTransport())
     const dispatcher = messageNumberHandler(transport.client)
     const removeListenerSpy = jest.spyOn(dispatcher, "removeListener")
-    const stream = streamFromDispatcher(
+
+    // create a client stream for the server
+    const clientStream = streamFromDispatcher(
       dispatcher,
-      StreamMessage.decode(streamMessage(MESSAGE_NUMBER, seq++, 0, Uint8Array.from([1]))),
+      StreamMessage.decode(streamMessage(MESSAGE_NUMBER, seq++, PORT_ID, Uint8Array.of())),
       MESSAGE_NUMBER
     )
 
-    transport.server.sendMessage(streamMessage(MESSAGE_NUMBER, seq++, 0, Uint8Array.from([2])))
-    transport.server.sendMessage(streamMessage(MESSAGE_NUMBER, seq++, 0, Uint8Array.from([3])))
-    transport.server.sendMessage(streamMessage(MESSAGE_NUMBER, seq++, 0, Uint8Array.from([4])))
+    // send three messags to the client
+    transport.server.sendMessage(streamMessage(MESSAGE_NUMBER, seq++, PORT_ID, Uint8Array.from([2])))
+    transport.server.sendMessage(streamMessage(MESSAGE_NUMBER, seq++, PORT_ID, Uint8Array.from([3])))
+    transport.server.sendMessage(streamMessage(MESSAGE_NUMBER, seq++, PORT_ID, Uint8Array.from([4])))
 
+    // then the listener should not have been called because the stream was not processed yet
     expect(removeListenerSpy).not.toHaveBeenCalledWith(MESSAGE_NUMBER)
-    const values = await takeAsync(stream, 2)
-    expect(values).toEqual([Uint8Array.from([1]), Uint8Array.from([2])])
-    // the listener should have ended because we finished the stream at two
+
+    const values = await takeAsync(clientStream, 1)
+    expect(values).toEqual([Uint8Array.from([2])])
+
+    // the listener should have ended because we finished the stream at 1st
     expect(removeListenerSpy).toHaveBeenCalledWith(MESSAGE_NUMBER)
 
     // rest of the stream can be consumed beacuse we have it in memory
-    const rest = await takeAsync(stream, 2)
+    const rest = await takeAsync(clientStream, 2)
     expect(rest).toEqual([Uint8Array.from([3]), Uint8Array.from([4])])
   })
 
   it("closes the stream if the transport has an error", async () => {
     let seq = 0
     const MESSAGE_NUMBER = 4
+    const PORT_ID = 0
     const transport = instrumentMemoryTransports(MemoryTransport())
     const dispatcher = messageNumberHandler(transport.client)
     const removeListenerSpy = jest.spyOn(dispatcher, "removeListener")
-    const stream = streamFromDispatcher(
+    // create a client stream for the server
+    const clientStream = streamFromDispatcher(
       dispatcher,
-      StreamMessage.decode(streamMessage(MESSAGE_NUMBER, seq++, 0, Uint8Array.from([1]))),
+      StreamMessage.decode(streamMessage(MESSAGE_NUMBER, seq++, PORT_ID, Uint8Array.of())),
       MESSAGE_NUMBER
     )
+
+    // send a message to the client
+    transport.server.sendMessage(streamMessage(MESSAGE_NUMBER, seq++, PORT_ID, Uint8Array.from([12])))
 
     expect(removeListenerSpy).not.toHaveBeenCalledWith(MESSAGE_NUMBER)
     transport.client.emit("error", new Error("TRANSPORT ERROR"))
@@ -190,10 +179,10 @@ describe("streamFromDispatcher", () => {
     // the listener should have ended because we finished the stream due to an error
     let received: Uint8Array[] = []
     await expect(async () => {
-      for await (const data of stream) {
+      for await (const data of clientStream) {
         received.push(data)
       }
     }).rejects.toThrow("RPC Transport failed")
-    expect(received).toEqual([Uint8Array.from([1])])
+    expect(received).toEqual([Uint8Array.from([12])])
   })
 })

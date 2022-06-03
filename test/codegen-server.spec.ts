@@ -1,11 +1,15 @@
-import { RpcServerPort } from "../src"
+import { future } from "fp-future"
 import { AlmostEmpty, Book, BookServiceDefinition, Empty, GetBookRequest, QueryBooksRequest } from "./codegen/client"
-import { createSimpleTestEnvironment, takeAsync } from "./helpers"
+import { createSimpleTestEnvironment, delay, takeAsync } from "./helpers"
 import * as codegen from "../src/codegen"
+import { from, lastValueFrom, take } from "rxjs"
 
 const FAIL_WITH_EXCEPTION_ISBN = 1
 
 describe("codegen client & server", () => {
+  let infiniteGeneratorClosed = 0
+  let infiniteGeneratorEmited = 0
+  let closeFuture = future<void>()
   const testEnv = createSimpleTestEnvironment(async function (port) {
     codegen.registerService(port, BookServiceDefinition, async () => ({
       async getBook(req: GetBookRequest) {
@@ -69,16 +73,65 @@ describe("codegen client & server", () => {
         yield { int: 1 }
         yield { int: 0 }
       },
+      infiniteGenerator() {
+        const ret: AsyncGenerator<AlmostEmpty> = {
+          [Symbol.asyncIterator]: () => ret,
+          async next() {
+            // hang in 4th iteration
+            if (infiniteGeneratorEmited == 4) await closeFuture
+            infiniteGeneratorEmited++
+            return { value: { int: infiniteGeneratorEmited } }
+          },
+          async return() {
+            infiniteGeneratorClosed++
+            return { done: true, value: null }
+          },
+          async throw() {
+            throw new Error("throw should never be called in this scenario")
+          },
+        }
+
+        return ret
+      },
+      failFirstGenerator() {
+        const ret: AsyncGenerator<AlmostEmpty> = {
+          [Symbol.asyncIterator]: () => ret,
+          next() {
+            throw new Error('Fails on first yield without returning a promise')
+          },
+          async return() {
+            throw new Error("Fails on return")
+          },
+          async throw() {
+            throw new Error("throw should never be called in this scenario")
+          },
+        }
+
+        return ret
+      },
     }))
   })
 
   let service: codegen.RpcClientModule<BookServiceDefinition>
 
-  it("basic service wraper creation", async () => {
+  beforeAll(async () => {
     const { rpcClient } = await testEnv.start()
 
     const clientPort = await rpcClient.createPort("test1")
     service = codegen.loadService(clientPort, BookServiceDefinition)
+
+  })
+
+  beforeEach(async () => {
+    process.stderr.write('Cleaning up...\n')
+
+    closeFuture.resolve()
+    closeFuture = future()
+    await delay(100)
+
+    infiniteGeneratorClosed = 0
+    infiniteGeneratorEmited = 0
+    process.stderr.write('\n')
   })
 
   it("calls an unary method", async () => {
@@ -151,5 +204,141 @@ describe("codegen client & server", () => {
     await expect(() => takeAsync(service.queryBooks({ authorPrefix: "fail_before_end" }))).rejects.toThrowError(
       "RemoteError: fail_before_end"
     )
+  })
+
+  it("infinite stream take vanilla 1", async () => {
+    infiniteGeneratorClosed = 0
+    infiniteGeneratorEmited = 0
+    closeFuture = future()
+
+    const gen = service.infiniteGenerator({})
+
+    const values = [
+      await (await gen.next()).value
+    ]
+
+    await gen.return(null)
+    // give it time to end and send async messages
+    await delay(100)
+
+    expect(values).toEqual([
+      { int: 1 }
+    ])
+
+    expect(infiniteGeneratorEmited).toEqual(1)
+    expect(infiniteGeneratorClosed).toEqual(1)
+  })
+
+
+  it("infinite stream take rxjs 2", async () => {
+    infiniteGeneratorClosed = 0
+    infiniteGeneratorEmited = 0
+    closeFuture = future()
+
+    const gen = from(service.infiniteGenerator({})).pipe(take(2))
+
+    await lastValueFrom(gen)
+    await delay(100)
+
+    expect(infiniteGeneratorEmited).toEqual(2)
+    expect(infiniteGeneratorClosed).toEqual(1)
+  })
+
+  it("infinite stream take rxjs 3", async () => {
+    infiniteGeneratorClosed = 0
+    infiniteGeneratorEmited = 0
+    closeFuture = future()
+
+    const gen = from(service.infiniteGenerator({})).pipe(take(3))
+    const values: any[] = []
+
+    const sub = gen.subscribe((value) => {
+      values.push(value)
+    })
+
+    await delay(1000)
+    sub.unsubscribe()
+    await delay(100)
+
+    expect(values).toEqual([
+      { int: 1 },
+      { int: 2 },
+      { int: 3 },
+    ])
+    expect(infiniteGeneratorEmited).toEqual(3)
+    expect(infiniteGeneratorClosed).toEqual(1)
+  })
+
+  it("infinite stream take rxjs 3 (using lastvalue)", async () => {
+    infiniteGeneratorClosed = 0
+    infiniteGeneratorEmited = 0
+    closeFuture = future()
+
+    const gen = from(service.infiniteGenerator({})).pipe(take(3))
+
+    const lastValue = await lastValueFrom(gen)
+    await delay(100)
+
+    expect(lastValue).toEqual({ int: 3 })
+    expect(infiniteGeneratorEmited).toEqual(3)
+    expect(infiniteGeneratorClosed).toEqual(1)
+  })
+
+  it("infinite stream take rxjs 4", async () => {
+    infiniteGeneratorClosed = 0
+    infiniteGeneratorEmited = 0
+    closeFuture = future()
+
+    const gen = from(service.infiniteGenerator({})).pipe(take(4))
+    const values: any[] = []
+
+    const sub = gen.subscribe((value) => {
+      values.push(value)
+    })
+
+    // allow the stream to be "fully" consumed
+    await delay(1000)
+    sub.unsubscribe()
+
+    // wait for the close message to arrive to the server
+    await delay(100)
+
+    // resolve the "hanging promise"
+    closeFuture.resolve()
+
+    // give it time to end and send async messages
+    await delay(100)
+
+    expect(values).toEqual([
+      { int: 1 },
+      { int: 2 },
+      { int: 3 },
+      { int: 4 },
+    ])
+    expect(infiniteGeneratorEmited).toEqual(4)
+    expect(infiniteGeneratorClosed).toEqual(1)
+  })
+
+  it("take async iterator", async () => {
+    infiniteGeneratorClosed = 0
+    infiniteGeneratorEmited = 0
+    closeFuture = future()
+
+    const values: any[] = []
+
+    for await (const value of service.infiniteGenerator({})) {
+      values.push(value)
+      if (values.length == 3) break
+    }
+
+    await delay(100)
+
+    expect(values).toEqual([
+      { int: 1 },
+      { int: 2 },
+      { int: 3 },
+    ])
+    expect(infiniteGeneratorEmited).toEqual(3)
+    expect(infiniteGeneratorClosed).toEqual(1)
   })
 })

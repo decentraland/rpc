@@ -1,16 +1,24 @@
 import { Transport, TransportEvents } from "../types"
 import mitt, { Emitter } from "mitt"
 
-export function MemoryTransport() {
+export type MemoryTransportOptions = {
+  decouplingFunction?: (cb: () => void) => void
+}
+
+export function MemoryTransport(options?: MemoryTransportOptions) {
   const clientEd = mitt<TransportEvents>()
   const serverEd = mitt<TransportEvents>()
+
+  const decouple = options?.decouplingFunction ?? ((cb) => cb())
 
   function configureMemoryTransport(receiver: Emitter<TransportEvents>, sender: Emitter<TransportEvents>): Transport {
     let isClosed = false
     return {
       ...sender,
       sendMessage(message) {
-        receiver.emit("message", message)
+        decouple(() => {
+          receiver.emit("message", message)
+        })
       },
       close() {
         if (!isClosed) {

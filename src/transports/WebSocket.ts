@@ -90,7 +90,6 @@ export function WebSocketTransport(socket: IWebSocket): Transport {
     if (message.data instanceof ArrayBuffer) {
       events.emit("message", new Uint8Array(message.data))
     } else {
-      debugger
       throw new Error(`WebSocketTransport: Received unknown type of message, expecting Uint8Array`)
     }
   })

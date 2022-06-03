@@ -1,7 +1,13 @@
-import { createRpcClient, createRpcServer, CreateRpcServerOptions, RpcClient, RpcServerHandler, Transport } from "../src"
+import {
+  createRpcClient,
+  createRpcServer,
+  CreateRpcServerOptions,
+  RpcServerHandler,
+  Transport,
+} from "../src"
 import { log } from "./logger"
 import { inspect } from "util"
-import { MemoryTransport } from "../src/transports/Memory"
+import { MemoryTransport, MemoryTransportOptions } from "../src/transports/Memory"
 import { parseProtocolMessage } from "../src/protocol/helpers"
 import { Reader } from "protobufjs/minimal"
 
@@ -12,7 +18,7 @@ export async function takeAsync<T>(iter: AsyncGenerator<T>, max?: number) {
   for await (const $ of iter) {
     r.push($)
     counter++
-    if (typeof max == "number" && counter == max) break
+    if (counter === max) break
   }
   return r
 }
@@ -24,7 +30,7 @@ function serialize(data: Uint8Array) {
 }
 
 export function instrumentTransport(transport: Transport, name: string) {
-  if (typeof it == "function") {
+  if (typeof it == "function" && process.env.INSTRUMENT_TRANSPORT) {
     transport.on("close", (data) => {
       log(`  (${name}): closed`)
     })
@@ -53,9 +59,21 @@ export function instrumentMemoryTransports(memoryTransport: ReturnType<typeof Me
   return memoryTransport
 }
 
-export function createSimpleTestEnvironment<Context = void>(handler: RpcServerHandler<Context>, options: CreateRpcServerOptions<Context> = {}) {
-  async function start(context: Context) {
-    const memoryTransport = MemoryTransport()
+export function createSimpleTestEnvironment<Context = void>(
+  handler: RpcServerHandler<Context>,
+  options: CreateRpcServerOptions<Context> = {}
+) {
+  async function start(context: Context, transportOptions?: MemoryTransportOptions) {
+    const memoryTransport = MemoryTransport({
+      decouplingFunction: (cb) => {
+        if (process.env.SIMMULATE_JITTER === 'true') {
+          setTimeout(cb, Math.random() * 10)
+        } else {
+          cb()
+        }
+      },
+      ...transportOptions
+    })
     instrumentMemoryTransports(memoryTransport)
 
     const rpcServer = createRpcServer(options)
