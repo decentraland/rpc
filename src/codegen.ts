@@ -159,10 +159,10 @@ export function loadService<CallContext = {}, Service extends TsProtoServiceDefi
 export function registerService<CallContext = {}, Service extends TsProtoServiceDefinition = any>(
   port: RpcServerPort<CallContext>,
   service: Service,
-  moduleInitializator: (port: RpcServerPort<CallContext>) => Promise<RpcServerModule<Service, CallContext>>
+  moduleInitializator: (port: RpcServerPort<CallContext>, context: CallContext) => Promise<RpcServerModule<Service, CallContext>>
 ) {
-  port.registerModule(service.name, async (port) => {
-    const mod = await moduleInitializator(port)
+  port.registerModule(service.name, async (port, context) => {
+    const mod = await moduleInitializator(port, context)
 
     const ret: Record<string, any> = {}
 

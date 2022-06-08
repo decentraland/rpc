@@ -113,7 +113,8 @@ export type RpcClient = {
  * @public
  */
 export type ModuleGeneratorFunction<Context> = (
-  port: RpcServerPort<Context>
+  port: RpcServerPort<Context>,
+  context: Context
 ) => Promise<ServerModuleDefinition<Context>>
 
 /**

@@ -12,7 +12,7 @@ const books = [
 ]
 
 export async function test() {
-  const testEnv = helpers.createSimpleTestEnvironment(async function (port) {
+  const testEnv = helpers.createSimpleTestEnvironment<void>(async function (port) {
     registerService(port, BookServiceDefinition, async () => ({
       async getBook(req) {
         return {

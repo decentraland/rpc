@@ -5,7 +5,7 @@ import { from } from "rxjs"
 describe("RXJS Unsubscribe", () => {
   let remoteCallCounter = 0
   let closedAmount = 0
-  const testEnv = createSimpleTestEnvironment(async function (port) {
+  const testEnv = createSimpleTestEnvironment<void>(async function (port) {
     log(`! Initializing port ${port.portId} ${port.portName}`)
     port.registerModule("echo", async (port) => ({
       async *infiniteCounter() {

@@ -68,7 +68,7 @@ function moduleProcedures<Context>(module: ServerModuleDefinition<Context>) {
 /**
  * @internal
  */
-export function createServerPort<Context>(portId: number, portName: string): RpcServerPort<Context> {
+export function createServerPort<Context>(portId: number, portName: string, context: Context): RpcServerPort<Context> {
   const events = mitt<RpcPortEvents>()
   const loadedModules = new Map<string, Promise<ServerModuleDeclaration<Context>>>()
   const procedures = new Map<number, CallableProcedureServer<Context>>()
@@ -134,7 +134,7 @@ export function createServerPort<Context>(portId: number, portName: string): Rpc
       throw new Error(`Module ${moduleName} is not available for port ${portName} (${portId}))`)
     }
 
-    const moduleFuture = loadModuleFromGenerator(moduleGenerator(port))
+    const moduleFuture = loadModuleFromGenerator(moduleGenerator(port, context))
     loadedModules.set(moduleName, moduleFuture)
 
     return moduleFuture
@@ -167,7 +167,7 @@ export async function handleCreatePort<Context>(
 ) {
   lastPortId++
 
-  const port = createServerPort(lastPortId, createPortMessage.portName)
+  const port = createServerPort(lastPortId, createPortMessage.portName, context)
 
   const byTransport = state.portsByTransport.get(transport) || new Map()
   byTransport.set(port.portId, port)
@@ -418,7 +418,7 @@ export function createRpcServer<Context = {}>(options: CreateRpcServerOptions<Co
           if (parsedMessage) {
             const [messageType, message, messageNumber] = parsedMessage
             try {
-              await handleMessage(messageType, message, messageNumber, newTransport, ackHelper, context!)
+              await handleMessage(messageType, message, messageNumber, newTransport, ackHelper, context)
             } catch (err: any) {
               options.logger?.error("Error handling remote request", {
                 message: err.message,

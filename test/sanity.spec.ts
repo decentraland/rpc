@@ -9,18 +9,18 @@ export type BasicTestModule = {
   assert(t: Uint8Array): Promise<Uint8Array>
 }
 
-export async function configureTestPortServer<Context = void>(
+export async function configureTestPortServer<Context = { key: boolean }>(
   port: RpcServerPort<any>,
   assert?: (t: Uint8Array, context: Context) => Promise<Uint8Array>
 ) {
   log(`! Initializing port ${port.portId} ${port.portName}`)
-  port.registerModule("fails", async (port): Promise<any> => {
-    throw new Error('Failed while creating ModuLe')
+  port.registerModule("fails", async (port, context): Promise<any> => {
+    throw new Error("Failed while creating ModuLe")
   })
-  port.registerModule(
-    "echo",
-    async (port): Promise<BasicTestModule> => ({
-      async returnEmpty() { },
+  port.registerModule("echo", async (port, context): Promise<BasicTestModule> => {
+    if (!context.key) throw new Error("missing key in context")
+    return {
+      async returnEmpty() {},
       async basic() {
         return Uint8Array.from([0, 1, 2])
       },
@@ -31,8 +31,8 @@ export async function configureTestPortServer<Context = void>(
         return test
       },
       assert: assert as any,
-    })
-  )
+    }
+  })
 }
 export async function testPort(rpcClient: RpcClient, portName: string) {
   log(`> Creating client port ${portName}`)
@@ -65,15 +65,15 @@ describe("Helpers simple req/res", () => {
   })
 
   it("creates the server and gracefully fails if a module creation fails", async () => {
-    const { rpcClient } = await testEnv.start()
+    const { rpcClient } = await testEnv.start({ key: true })
 
     const port1 = await testPort(rpcClient, "port1")
-    await expect(() => port1.loadModule("fails")).rejects.toThrowError('Failed while creating ModuLe')
-    await expect(() => port1.loadModule("unknown-module")).rejects.toThrowError('Module unknown-module is not available for port port1')
+    await expect(() => port1.loadModule("fails")).rejects.toThrowError("Failed while creating ModuLe")
+    await expect(() => port1.loadModule("unknown-module")).rejects.toThrowError(
+      "Module unknown-module is not available for port port1"
+    )
     const port2 = await testPort(rpcClient, "port2")
 
     expect(port1).not.toBe(port2)
   })
-
-  
 })

@@ -8,7 +8,7 @@ async function testPort(rpcClient: RpcClient, moduleName: string) {
   }
 }
 
-const testEnv = createSimpleTestEnvironment(async function (port) {
+const testEnv = createSimpleTestEnvironment<void>(async function (port) {
   port.registerModule("fails", async (port) => {
     throw new Error("Access denied")
   })

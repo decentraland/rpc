@@ -5,7 +5,7 @@ import { createSimpleTestEnvironment, takeAsync } from "./helpers"
 const FAIL_WITH_EXCEPTION_ISBN = 1
 
 describe("codegen client", () => {
-  const testEnv = createSimpleTestEnvironment(async function (port) {
+  const testEnv = createSimpleTestEnvironment<void>(async function (port) {
     port.registerModule("BookService", async (port) => ({
       async GetBook(arg: Uint8Array) {
         const req = GetBookRequest.decode(arg)

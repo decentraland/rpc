@@ -59,7 +59,7 @@ export function instrumentMemoryTransports(memoryTransport: ReturnType<typeof Me
   return memoryTransport
 }
 
-export function createSimpleTestEnvironment<Context = void>(
+export function createSimpleTestEnvironment<Context>(
   handler: RpcServerHandler<Context>,
   options: CreateRpcServerOptions<Context> = {}
 ) {

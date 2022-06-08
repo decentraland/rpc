@@ -15,7 +15,7 @@ async function testPort(rpcClient: RpcClient, portName: string) {
   return port
 }
 
-const testEnv = createSimpleTestEnvironment(async function (port) {
+const testEnv = createSimpleTestEnvironment<void>(async function (port) {
   port.registerModule("echo", async (port) => ({
     async getPortId() {
       return Uint8Array.from([port.portId % 0xff])

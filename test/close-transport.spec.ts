@@ -195,7 +195,7 @@ test("Unit: AckDispatcher rejects all pending operations on transport close", as
 
 describe("Throw in client iterator closes remote iterator", () => {
   const didClose = future<any>()
-  const testEnv = createSimpleTestEnvironment(async function (port) {
+  const testEnv = createSimpleTestEnvironment<void>(async function (port) {
     let i = 0
     port.registerModule("echo", async (port) => ({
       infinite() {
@@ -234,7 +234,7 @@ describe("Throw in client iterator closes remote iterator", () => {
 
 describe("Throw in client iterator closes remote iterator after receiving a message", () => {
   const didClose = future<any>()
-  const testEnv = createSimpleTestEnvironment(async function (port) {
+  const testEnv = createSimpleTestEnvironment<void>(async function (port) {
     let i = 0
     port.registerModule("echo", async (port) => ({
       infinite() {
@@ -270,7 +270,7 @@ describe("Throw in client iterator closes remote iterator after receiving a mess
 
 describe("Close transport closes streams (server side) 1", () => {
   const didClose = future<any>()
-  const testEnv = createSimpleTestEnvironment(async function (port) {
+  const testEnv = createSimpleTestEnvironment<void>(async function (port) {
     let i = 0
     port.registerModule("echo", async (port) => ({
       infinite() {
@@ -310,7 +310,7 @@ describe("Close transport closes streams (server side) 1", () => {
 
 describe("Close transport closes streams (server side)", () => {
   let infiniteStreamClosed = false
-  const testEnv = createSimpleTestEnvironment(async function (port) {
+  const testEnv = createSimpleTestEnvironment<void>(async function (port) {
     port.registerModule("echo", async (port) => ({
       async *infinite() {
         try {
@@ -348,7 +348,7 @@ describe("Close transport closes streams (server side)", () => {
 
 describe("Error in transport finalizes streams", () => {
   let infiniteStreamClosed = false
-  const testEnv = createSimpleTestEnvironment(async function (port) {
+  const testEnv = createSimpleTestEnvironment<void>(async function (port) {
     port.registerModule("echo", async (port) => ({
       async *infinite() {
         try {
@@ -386,7 +386,7 @@ describe("Error in transport finalizes streams", () => {
 
 describe("Close transport closes streams (client side)", () => {
   let infiniteStreamClosed = 0
-  const testEnv = createSimpleTestEnvironment(async function (port) {
+  const testEnv = createSimpleTestEnvironment<void>(async function (port) {
     port.registerModule("echo", async (port) => ({
       async *infinite() {
         try {
@@ -425,7 +425,7 @@ describe("Close transport closes streams (client side)", () => {
 
 describe("Error in server transport closes the iterators", () => {
   let infiniteStreamClosed = false
-  const testEnv = createSimpleTestEnvironment(async function (port) {
+  const testEnv = createSimpleTestEnvironment<void>(async function (port) {
     port.registerModule("echo", async (port) => ({
       infinite() {
         infiniteStreamClosed = false
@@ -474,7 +474,7 @@ describe("Error in server transport closes the iterators", () => {
 })
 
 async function setupForFailures() {
-  const testEnv = createSimpleTestEnvironment(async function (port) {
+  const testEnv = createSimpleTestEnvironment<void>(async function (port) {
     port.registerModule("echo", async () => ({
       async infinite() {
         return Uint8Array.from([2])

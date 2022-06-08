@@ -34,7 +34,7 @@ async function testPort(rpcClient: RpcClient, portName: string) {
 describe("Helpers simple req/res", () => {
   let remoteCallCounter = 0
   let channel: ReturnType<typeof pushableChannel>
-  const testEnv = createSimpleTestEnvironment(async function (port) {
+  const testEnv = createSimpleTestEnvironment<void>(async function (port) {
     log(`! Initializing port ${port.portId} ${port.portName}`)
     port.registerModule("echo", async (port) => ({
       async *basic() {

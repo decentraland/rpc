@@ -34,7 +34,7 @@ export type CreateRpcServerOptions<Context> = {
 };
 
 // @public (undocumented)
-export type ModuleGeneratorFunction<Context> = (port: RpcServerPort<Context>) => Promise<ServerModuleDefinition<Context>>;
+export type ModuleGeneratorFunction<Context> = (port: RpcServerPort<Context>, context: Context) => Promise<ServerModuleDefinition<Context>>;
 
 // @public (undocumented)
 export type RpcClient = {

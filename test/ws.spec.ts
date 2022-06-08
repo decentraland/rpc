@@ -8,11 +8,11 @@ import { configureTestPortServer, testPort } from "./sanity.spec"
 describe("WebSocket test simple", () => {
   let sv: WebSocketServer
 
-  let server: RpcServer<void>
-  let serverPort: RpcServerPort<void>
+  let server: RpcServer<{ key: boolean }>
+  let serverPort: RpcServerPort<{ key: boolean }>
 
   it("creates a server", () => {
-    server = createRpcServer<void>({})
+    server = createRpcServer<{ key: boolean }>({})
     server.setHandler(async function (port) {
       serverPort = port
       await configureTestPortServer(port)
@@ -28,7 +28,7 @@ describe("WebSocket test simple", () => {
       log("Got server connection:")
       const serverTransport = WebSocketTransport(ws)
       instrumentTransport(serverTransport, "serverTransport")
-      server.attachTransport(serverTransport)
+      server.attachTransport(serverTransport, { key: true })
     })
   })
 
@@ -63,8 +63,8 @@ describe("WebSocket test simple", () => {
 describe("WebSocket test close server", () => {
   let sv: WebSocketServer
 
-  let server: RpcServer<void>
-  let serverPort: RpcServerPort<any>
+  let server: RpcServer<{key: boolean}>
+  let serverPort: RpcServerPort<{key: boolean}>
 
   it("creates a server", () => {
     server = createRpcServer({})
@@ -83,7 +83,7 @@ describe("WebSocket test close server", () => {
       log("Got server connection:")
       const serverTransport = WebSocketTransport(ws)
       instrumentTransport(serverTransport, "serverTransport")
-      server.attachTransport(serverTransport)
+      server.attachTransport(serverTransport, {key: true})
     })
   })
 
@@ -116,8 +116,8 @@ describe("WebSocket test close server", () => {
 })
 
 describe("Closing the serverTransport closes the WebSocket connection", () => {
-  type Context = { hello: string }
-  const leContext: Context = { hello: "asd" }
+  type Context = { hello: string, key: true }
+  const leContext: Context = { hello: "asd", key: true }
   let sv: WebSocketServer
   let server: RpcServer<Context>
   let serverPort: RpcServerPort<Context>

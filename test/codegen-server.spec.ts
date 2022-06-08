@@ -97,7 +97,7 @@ describe("codegen client & server", () => {
         const ret: AsyncGenerator<AlmostEmpty> = {
           [Symbol.asyncIterator]: () => ret,
           next() {
-            throw new Error('Fails on first yield without returning a promise')
+            throw new Error("Fails on first yield without returning a promise")
           },
           async return() {
             throw new Error("Fails on return")
@@ -115,15 +115,14 @@ describe("codegen client & server", () => {
   let service: codegen.RpcClientModule<BookServiceDefinition>
 
   beforeAll(async () => {
-    const { rpcClient } = await testEnv.start()
+    const { rpcClient } = await testEnv.start({})
 
     const clientPort = await rpcClient.createPort("test1")
     service = codegen.loadService(clientPort, BookServiceDefinition)
-
   })
 
   beforeEach(async () => {
-    process.stderr.write('Cleaning up...\n')
+    process.stderr.write("Cleaning up...\n")
 
     closeFuture.resolve()
     closeFuture = future()
@@ -131,7 +130,7 @@ describe("codegen client & server", () => {
 
     infiniteGeneratorClosed = 0
     infiniteGeneratorEmited = 0
-    process.stderr.write('\n')
+    process.stderr.write("\n")
   })
 
   it("calls an unary method", async () => {
@@ -213,22 +212,17 @@ describe("codegen client & server", () => {
 
     const gen = service.infiniteGenerator({})
 
-    const values = [
-      await (await gen.next()).value
-    ]
+    const values = [await (await gen.next()).value]
 
     await gen.return(null)
     // give it time to end and send async messages
     await delay(100)
 
-    expect(values).toEqual([
-      { int: 1 }
-    ])
+    expect(values).toEqual([{ int: 1 }])
 
     expect(infiniteGeneratorEmited).toEqual(1)
     expect(infiniteGeneratorClosed).toEqual(1)
   })
-
 
   it("infinite stream take rxjs 2", async () => {
     infiniteGeneratorClosed = 0
@@ -260,11 +254,7 @@ describe("codegen client & server", () => {
     sub.unsubscribe()
     await delay(100)
 
-    expect(values).toEqual([
-      { int: 1 },
-      { int: 2 },
-      { int: 3 },
-    ])
+    expect(values).toEqual([{ int: 1 }, { int: 2 }, { int: 3 }])
     expect(infiniteGeneratorEmited).toEqual(3)
     expect(infiniteGeneratorClosed).toEqual(1)
   })
@@ -309,12 +299,7 @@ describe("codegen client & server", () => {
     // give it time to end and send async messages
     await delay(100)
 
-    expect(values).toEqual([
-      { int: 1 },
-      { int: 2 },
-      { int: 3 },
-      { int: 4 },
-    ])
+    expect(values).toEqual([{ int: 1 }, { int: 2 }, { int: 3 }, { int: 4 }])
     expect(infiniteGeneratorEmited).toEqual(4)
     expect(infiniteGeneratorClosed).toEqual(1)
   })
@@ -333,11 +318,7 @@ describe("codegen client & server", () => {
 
     await delay(100)
 
-    expect(values).toEqual([
-      { int: 1 },
-      { int: 2 },
-      { int: 3 },
-    ])
+    expect(values).toEqual([{ int: 1 }, { int: 2 }, { int: 3 }])
     expect(infiniteGeneratorEmited).toEqual(3)
     expect(infiniteGeneratorClosed).toEqual(1)
   })
