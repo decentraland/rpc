@@ -69,18 +69,18 @@ S->C: Response {message_id, payload}
 participant Scene (client) as C
 participant Kernel (server) as S
 C->S: Request {message_id}
-S->C: Response {message_id,streaming=true,seqId=0}
+S->C: StreamMessage {message_id,seqId=0,payload=empty}
 C->C: Generate async iterator for {message_id}
 C->S: StreamMessage {ack=true,message_id,seqId=0}
 note over C: Ask for a new item to be generated using ack=true
-S-->C: StreamMessage {message_id,payload,seqId=1}
+S-->C: StreamMessage {message_id,payload,seqId=1,payload}
 C->S: StreamMessage {ack=true,message_id,seqId=1}
 note over C: Close the message by responding\nthe last ACK with ack=true,closed=true
 S-->C: StreamMessage {message_id,payload,seqId=2}
 C->S: StreamMessage {ack=true,message_id,seqId=2,closed=true}
 S->S: Close async Generator
 C->C: Close async Iterator
-S-->C: StreamMessage {message_id,closed=true}
+S-->C: StreamMessage {message_id,seqId=2,closed=true,payload=empty}
 C->C: Close async iterator
 ```
 
