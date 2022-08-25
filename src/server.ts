@@ -365,6 +365,7 @@ export function createRpcServer<Context = {}>(options: CreateRpcServerOptions<Co
     // TODO: we need to add a test for this
     const portsByTransport = state.portsByTransport.get(transport)
     if (portsByTransport) {
+      // TODO: test this line
       portsByTransport.delete(port.portId)
     }
   })
