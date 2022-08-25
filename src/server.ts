@@ -359,8 +359,12 @@ export function createRpcServer<Context = {}>(options: CreateRpcServerOptions<Co
   }
 
   events.on("portClosed", (evt) => {
-    const { port } = evt
+    const { port, transport } = evt
     state.ports.delete(port.portId)
+    const portsByTransport = state.portsByTransport.get(transport)
+    if (portsByTransport) {
+      portsByTransport.delete(port.portId)
+    }
   })
 
   function handleTransportError(transport: Transport, error: Error) {
@@ -385,7 +389,7 @@ export function createRpcServer<Context = {}>(options: CreateRpcServerOptions<Co
       await handleRequestModule(transport, parsedMessage, messageNumber, state)
     } else if (messageType == RpcMessageTypes.RpcMessageTypes_CREATE_PORT) {
       const port = await handleCreatePort(transport, parsedMessage, messageNumber, options, handler, state, context)
-      port.on("close", () => events.emit("portClosed", { port }))
+      port.on("close", () => events.emit("portClosed", { port, transport }))
     } else if (messageType == RpcMessageTypes.RpcMessageTypes_DESTROY_PORT) {
       await handleDestroyPort(transport, parsedMessage, messageNumber, state)
     } else if (
