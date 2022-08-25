@@ -68,6 +68,7 @@ export type RpcServerEvents = {
     };
     portClosed: {
         port: RpcServerPort<any>;
+        transport: Transport;
     };
     transportClosed: {
         transport: Transport;
