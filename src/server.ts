@@ -361,6 +361,8 @@ export function createRpcServer<Context = {}>(options: CreateRpcServerOptions<Co
   events.on("portClosed", (evt) => {
     const { port, transport } = evt
     state.ports.delete(port.portId)
+
+    // TODO: we need to add a test for this
     const portsByTransport = state.portsByTransport.get(transport)
     if (portsByTransport) {
       portsByTransport.delete(port.portId)
