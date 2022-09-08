@@ -1,15 +1,17 @@
-type Node<T> = { value: T; prev?: Node<T>; next?: Node<T> }
 type LastResolver = (err?: any) => void
+
+class Node<T> {
+  next?: Node<T> = undefined
+  constructor(public readonly value: T, public prev?: Node<T>) {}
+}
 
 export function linkedList<T>() {
   let head: Node<T> | undefined = undefined
   let tail: Node<T> | undefined = undefined
 
   function enqueue(value: T) {
-    const node: Node<T> = {
-      value,
-    }
-    node.prev = tail
+    const node: Node<T> = new Node<T>(value, tail)
+
     if (tail) {
       tail.next = node
     }
@@ -39,7 +41,14 @@ export function linkedList<T>() {
     const ret = head
     if (ret) {
       remove(ret)
-      return ret.value
+
+      // this is important to prevent leaks
+      delete ret.next
+      delete ret.prev
+      const value = ret.value
+      // help the GC
+      delete (ret as any).value
+      return value
     }
     return undefined
   }
