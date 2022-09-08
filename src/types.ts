@@ -140,7 +140,7 @@ export type RpcServerPort<Context> = Pick<Emitter<RpcPortEvents>, "on" | "emit">
  */
 export type RpcServerEvents = {
   portCreated: { port: RpcServerPort<any> }
-  portClosed: { port: RpcServerPort<any> }
+  portClosed: { port: RpcServerPort<any>; transport: Transport }
   transportClosed: { transport: Transport }
   transportError: { transport: Transport; error: Error }
 }
