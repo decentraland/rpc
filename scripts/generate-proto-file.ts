@@ -151,6 +151,7 @@ proto.addMessage(
     PAYLOAD, // Server->Client the payload in case of a successful result
     field("bool", "closed", 7), // Server->Client/Client->Server an empty message signaling the end of the stream
     field("bool", "ack", 8), // Client->Server used for backpressure
+    field("bool", "require_ack", 9), // Server->Client used to know if the stream will use `ack`
   ],
   ["RpcMessageHeader"]
 )

@@ -141,7 +141,9 @@ export function streamFromDispatcher(
       if (action == "close") {
         dispatcher.transport.sendMessage(closeStreamMessage(messageNumber, lastReceivedSequenceId, streamMessage.portId))
       } else if (action == "next") {
-        dispatcher.transport.sendMessage(streamAckMessage(messageNumber, lastReceivedSequenceId, streamMessage.portId))
+        if (streamMessage.requireAck) {
+          dispatcher.transport.sendMessage(streamAckMessage(messageNumber, lastReceivedSequenceId, streamMessage.portId))
+        }
       }
     }
   }

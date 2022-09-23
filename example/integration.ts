@@ -68,8 +68,18 @@ async function handleClientCreation() {
   })
 
   const list: Book[] = []
+  let counter = 0
+  let started = new Date().getTime()
+
   for await (const book of clientBookService.queryBooks({ authorPrefix: "mr" })) {
     list.push(book)
+    counter += 1
+    const now = new Date().getTime()
+    const elapsed = now - started
+    if (elapsed > 1000) {
+      console.log(counter)
+      started = now
+    }
   }
   expect(list).toEqual(context.hardcodedDatabase)
 }

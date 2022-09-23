@@ -114,6 +114,9 @@ export type ServerModuleProcedure<Context> = {
 };
 
 // @public (undocumented)
+export function streamWithoutAck<T extends object>(args: T): T;
+
+// @public (undocumented)
 export type Transport = Pick<Emitter<TransportEvents>, "on" | "emit"> & {
     sendMessage(message: Uint8Array): void;
     close(): void;

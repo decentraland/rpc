@@ -1,0 +1,165 @@
+import { streamWithoutAck } from "../src"
+import { log } from "./logger"
+import { createSimpleTestEnvironment, delay } from "./helpers"
+import { pushableChannel } from "../src/push-channel"
+
+describe("Stream without ACK", () => {
+  let remoteCallCounter = 0
+  let channel: ReturnType<typeof pushableChannel>
+  const testEnv = createSimpleTestEnvironment<void>(async function (port) {
+    log(`! Initializing port ${port.portId} ${port.portName}`)
+    port.registerModule("echo", async (port) => ({
+      async *basic() {
+        yield Uint8Array.from([0])
+        yield Uint8Array.from([1])
+        yield Uint8Array.from([2])
+        yield Uint8Array.from([3])
+        return streamWithoutAck
+      },
+      async *throwFirst() {
+        log('Will throw!')
+        throw new Error("safe error 1")
+        return streamWithoutAck
+      },
+      async *throwSecond() {
+        yield Uint8Array.from([0])
+        throw new Error("safe error 2")
+        return streamWithoutAck
+      },
+      async *infiniteCounter() {
+        let counter = 0
+        while (true) {
+          remoteCallCounter++
+          counter++
+          log("infiniteCounter yielding #" + counter + " " + (counter % 0xff))
+          yield new Uint8Array([counter % 0xff])
+        }
+        return streamWithoutAck
+      },
+      async *parameterCounter(data) {
+        let total = data[0]
+        while (total > 0) {
+          total--
+          yield new Uint8Array([total % 0xff])
+        }
+        return streamWithoutAck
+      },
+    }))
+  })
+
+  it("basic iteration", async () => {
+    const { rpcClient } = await testEnv.start()
+    const port = await rpcClient.createPort("test1")
+    const module = (await port.loadModule("echo")) as {
+      basic(): Promise<AsyncGenerator<Uint8Array>>
+    }
+    let values: Uint8Array[] = []
+    for await (const u8a of await module.basic()) {
+      values.push(u8a)
+    }
+    expect(new Uint8Array(Buffer.concat(values))).toEqual(new Uint8Array([0, 1, 2, 3]))
+  })
+
+  it("fails in async generator before yielding, the async iterator in our end throws", async () => {
+    const { rpcClient } = await testEnv.start()
+    const port = await rpcClient.createPort("test1")
+    const module = (await port.loadModule("echo")) as {
+      throwFirst(): Promise<AsyncGenerator<Uint8Array>>
+    }
+    let values: any[] = []
+
+    await expect(async () => {
+      for await (const u8a of await module.throwFirst()) {
+        values.push(u8a)
+      }
+    }).rejects.toThrow("RemoteError: safe error 1")
+
+    expect(values).toEqual([])
+  })
+
+  it("yields one result and then throws. must end the stream with exception and the first result must arrive correctly", async () => {
+    const { rpcClient } = await testEnv.start()
+    const port = await rpcClient.createPort("test1")
+    const module = (await port.loadModule("echo")) as {
+      throwSecond(): Promise<AsyncGenerator<Uint8Array>>
+    }
+    let values: any[] = []
+
+    await expect(async () => {
+      for await (const u8a of await module.throwSecond()) {
+        values.push(u8a)
+      }
+    }).rejects.toThrow("RemoteError: safe error 2")
+
+    expect(values).toEqual([new Uint8Array([0])])
+  })
+
+  it("a remote infiniteCounter is stopped via exception from client side on third iteration", async () => {
+    const { rpcClient } = await testEnv.start()
+    const port = await rpcClient.createPort("test1")
+    const module = (await port.loadModule("echo")) as {
+      infiniteCounter(): Promise<AsyncGenerator<Uint8Array>>
+    }
+    const values: Uint8Array[] = []
+    const FINAL_RESULT = new Uint8Array([1, 2, 3])
+
+    const generator = (await module.infiniteCounter())[Symbol.asyncIterator]()
+
+    remoteCallCounter = 0
+
+    values.push(await (await generator.next()).value)
+    values.push(await (await generator.next()).value)
+    values.push(await (await generator.next()).value)
+    await generator.throw(new Error("closed locally"))
+
+    expect(new Uint8Array(Buffer.concat(values))).toEqual(FINAL_RESULT)
+  })
+
+  it("a remote infiniteCounter is gracefully stopped from client side on third iteration", async () => {
+    const { rpcClient } = await testEnv.start()
+    const port = await rpcClient.createPort("test1")
+    const module = (await port.loadModule("echo")) as {
+      infiniteCounter(): Promise<AsyncGenerator<Uint8Array>>
+    }
+    const values: Uint8Array[] = []
+    const FINAL_RESULT = new Uint8Array([1, 2, 3])
+    let localCallCounter = 0
+    remoteCallCounter = 0
+
+    for await (const u8a of await module.infiniteCounter()) {
+      values.push(u8a)
+      localCallCounter++
+      if (localCallCounter == FINAL_RESULT.length) break
+    }
+
+    expect(new Uint8Array(Buffer.concat(values))).toEqual(FINAL_RESULT)
+
+    expect(remoteCallCounter).toEqual(localCallCounter)
+  })
+
+  it("a remote infiniteCounter is halted IF the transport is forcefully closed", async () => {
+    const { rpcClient, transportServer } = await testEnv.start()
+    const port = await rpcClient.createPort("test1")
+    const module = (await port.loadModule("echo")) as {
+      infiniteCounter(): Promise<AsyncGenerator<Uint8Array>>
+    }
+    const values: Uint8Array[] = []
+    const FINAL_RESULT = new Uint8Array([1, 2, 3])
+    let localCallCounter = 0
+    remoteCallCounter = 0
+
+    await expect(async () => {
+      for await (const u8a of await module.infiniteCounter()) {
+        values.push(u8a)
+        localCallCounter++
+        if (localCallCounter == FINAL_RESULT.length) {
+          transportServer.close()
+        }
+      }
+    }).rejects.toThrow("RPC Transport closed")
+
+    expect(new Uint8Array(Buffer.concat(values))).toEqual(FINAL_RESULT)
+
+    expect(remoteCallCounter).toEqual(localCallCounter)
+  })
+})

@@ -26,6 +26,7 @@ export function closeStreamMessage(messageNumber: number, sequenceId: number, po
       ack: false,
       closed: true,
       payload: EMPTY_U8A,
+      requireAck: false
     },
     bb
   )
@@ -47,6 +48,7 @@ export function streamMessage(
       ack: false,
       closed: false,
       payload,
+      requireAck: true
     },
     bb
   )
@@ -63,6 +65,7 @@ export function streamAckMessage(messageNumber: number, sequenceId: number, port
       ack: true,
       closed: false,
       payload: EMPTY_U8A,
+      requireAck: true
     },
     bb
   )

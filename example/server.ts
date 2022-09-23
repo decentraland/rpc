@@ -2,6 +2,8 @@ import * as codegen from "../src/codegen"
 import { RpcServerPort } from "../src/types"
 import expect from "expect"
 import { Book, BookServiceDefinition, GetBookRequest, QueryBooksRequest } from "./api"
+import { streamWithoutAck } from "../src"
+import { ServerStreamingMethodImplementation } from "../src/codegen-types"
 
 // This file creates the server implementation of BookService defined in api.proto
 
@@ -25,15 +27,31 @@ export function registerBookServiceServerImplementation(port: RpcServerPort<Test
       }
     },
     async *queryBooks(req: QueryBooksRequest, context) {
+
+      /*const generator = async function* (req: QueryBooksRequest, context): ServerStreamingMethodImplementation<QueryBooksRequest, Book, Test> {
+        if (req.authorPrefix == "fail_before_yield") throw new Error("fail_before_yield")
+
+        for (const book of context.hardcodedDatabase) {
+          if (book.author.includes(req.authorPrefix)) {
+            yield book
+          }
+        }
+  
+        if (req.authorPrefix == "fail_before_end") throw new Error("fail_before_end")
+      }*/
+
       if (req.authorPrefix == "fail_before_yield") throw new Error("fail_before_yield")
 
-      for (const book of context.hardcodedDatabase) {
-        if (book.author.includes(req.authorPrefix)) {
-          yield book
+      while (true) {
+        for (const book of context.hardcodedDatabase) {
+          if (book.author.includes(req.authorPrefix)) {
+            yield book
+          }
         }
       }
 
       if (req.authorPrefix == "fail_before_end") throw new Error("fail_before_end")
+
     },
   }))
 }

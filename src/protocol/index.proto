@@ -76,4 +76,5 @@ message StreamMessage {
   bytes	payload = 6;
   bool	closed = 7;
   bool	ack = 8;
+  bool	require_ack = 9;
 }
