@@ -178,7 +178,7 @@ test("Unit: AckDispatcher rejects all pending operations on transport close", as
   const transport = MemoryTransport()
   const ackDispatcher: AckDispatcher = createAckHelper(transport.server)
 
-  const promises = Promise.allSettled([
+  const promises = Promise.all([
     ackDispatcher.sendWithAck({ messageIdentifier: calculateMessageIdentifier(0, 1), sequenceId: 1, payload: '' } as any),
     ackDispatcher.sendWithAck({ messageIdentifier: calculateMessageIdentifier(0, 2), sequenceId: 2, payload: '' } as any),
     ackDispatcher.sendWithAck({ messageIdentifier: calculateMessageIdentifier(0, 3), sequenceId: 3, payload: '' } as any),
@@ -187,9 +187,9 @@ test("Unit: AckDispatcher rejects all pending operations on transport close", as
   transport.server.close()
 
   expect(await promises).toMatchObject([
-    { status: 'rejected', reason: { message: 'Transport closed while waiting the ACK' } },
-    { status: 'rejected', reason: { message: 'Transport closed while waiting the ACK' } },
-    { status: 'rejected', reason: { message: 'Transport closed while waiting the ACK' } }
+    { closed: true },
+    { closed: true },
+    { closed: true }
   ])
 })
 
