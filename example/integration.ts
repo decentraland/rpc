@@ -46,6 +46,12 @@ import { createBookServiceClient } from "./client"
 import expect from "expect"
 import { Book } from "./api"
 
+async function* bookGenerator() {
+  for (const book of context.hardcodedDatabase) {
+    yield book;
+  }
+}
+
 async function handleClientCreation() {
   // 6th step: once connected to the server, ask the server to create a port
   const client = await clientPromise
@@ -68,20 +74,18 @@ async function handleClientCreation() {
   })
 
   const list: Book[] = []
-  let counter = 0
-  let started = new Date().getTime()
-
   for await (const book of clientBookService.queryBooks({ authorPrefix: "mr" })) {
     list.push(book)
-    counter += 1
-    const now = new Date().getTime()
-    const elapsed = now - started
-    if (elapsed > 1000) {
-      console.log(counter)
-      started = now
-    }
   }
   expect(list).toEqual(context.hardcodedDatabase)
+
+  const streamResponse = await clientBookService.getBookStream(bookGenerator())
+  console.log("  Response: ", streamResponse)
+  expect(streamResponse).toEqual({
+    author: "kuruk",
+    isbn: 2077,
+    title: "Le protocol",
+  })
 }
 
 handleClientCreation().catch((err) => {

@@ -26,9 +26,9 @@ export function registerBookServiceServerImplementation(port: RpcServerPort<Test
         title: "Rpc onion layers",
       }
     },
-    async *queryBooks(req: QueryBooksRequest, context) {
+    queryBooks(req: QueryBooksRequest, context) {
 
-      /*const generator = async function* (req: QueryBooksRequest, context): ServerStreamingMethodImplementation<QueryBooksRequest, Book, Test> {
+      const generator = async function* () {
         if (req.authorPrefix == "fail_before_yield") throw new Error("fail_before_yield")
 
         for (const book of context.hardcodedDatabase) {
@@ -38,20 +38,20 @@ export function registerBookServiceServerImplementation(port: RpcServerPort<Test
         }
   
         if (req.authorPrefix == "fail_before_end") throw new Error("fail_before_end")
-      }*/
-
-      if (req.authorPrefix == "fail_before_yield") throw new Error("fail_before_yield")
-
-      while (true) {
-        for (const book of context.hardcodedDatabase) {
-          if (book.author.includes(req.authorPrefix)) {
-            yield book
-          }
-        }
       }
 
-      if (req.authorPrefix == "fail_before_end") throw new Error("fail_before_end")
-
+      return streamWithoutAck(generator())
     },
+    async getBookStream(req: AsyncGenerator<GetBookRequest>, context) {
+      for await (const message of req) {
+        console.log('Received client stream: ', message)
+      }
+
+      return {
+        author: "kuruk",
+        isbn: 2077,
+        title: "Le protocol",
+      }
+    }
   }))
 }

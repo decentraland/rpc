@@ -204,6 +204,14 @@ export const BookServiceDefinition = {
       responseStream: true,
       options: {},
     },
+    getBookStream: {
+      name: "GetBookStream",
+      requestType: GetBookRequest,
+      requestStream: true,
+      responseType: Book,
+      responseStream: false,
+      options: {},
+    },
   },
 } as const
 

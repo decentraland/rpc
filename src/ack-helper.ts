@@ -6,11 +6,13 @@ import { StreamMessage } from "./protocol"
 export type AckDispatcher = {
   sendWithAck(data: StreamMessage): Promise<StreamMessage>
   receiveAck(data: StreamMessage, messageNumber: number): void
+  addStreamListener(messageNumber: number, fn: (msg: StreamMessage) => void): void
+  emitStream(messageNumber: number, streamMessage: StreamMessage): void
 }
 
 export function createAckHelper(transport: Transport): AckDispatcher {
   const oneTimeCallbacks = new Map<string, [(msg: StreamMessage) => void, (err: Error) => void]>()
-
+  const streams = new Map<number, (msg: StreamMessage) => void>()
   const bb = new Writer()
 
   function closeAll() {
@@ -50,5 +52,14 @@ export function createAckHelper(transport: Transport): AckDispatcher {
 
       return ret
     },
+    addStreamListener(messageNumber: number, fn: (msg: StreamMessage) => void) {
+      streams.set(messageNumber, fn)
+    },
+    emitStream(messageNumber: number, streamMessage: StreamMessage) {
+      const stream = streams.get(messageNumber)
+      if (stream) {
+        stream(streamMessage)
+      }
+    }
   }
 }

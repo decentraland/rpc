@@ -20,7 +20,7 @@ export function closeStreamMessage(messageNumber: number, sequenceId: number, po
   bb.reset()
   StreamMessage.encode(
     {
-      messageIdentifier: calculateMessageIdentifier(RpcMessageTypes.RpcMessageTypes_STREAM_MESSAGE, messageNumber),
+      messageIdentifier: calculateMessageIdentifier(RpcMessageTypes.RpcMessageTypes_STREAM_ACK, messageNumber),
       sequenceId,
       portId,
       ack: false,

@@ -4,10 +4,11 @@ import {
   TsProtoMethodDefinition,
   TsProtoServiceDefinition,
   UnaryMethodImplementation,
-  ServerStreamingClientMethod,
+  ServerStreamingMethod,
   UnaryClientMethod,
   RawServiceImplementation,
   MethodImplementation,
+  ClientStreamingMethod,
 } from "./codegen-types"
 import { CallableProcedureClient, RpcClientPort, RpcServerPort } from "./types"
 
@@ -30,10 +31,34 @@ export function clientProcedureUnary<Request, Response>(
   return fn
 }
 
-export function clientProcedureStream<Request, Response>(
+async function* requestToBinaryGenerator<Request, Response>(requests: AsyncIterable<Request>, method: TsProtoMethodDefinition<Request, Response>): AsyncIterable<Uint8Array> {
+  for await (const request of requests) {
+    const arg = method.requestType.encode(request)
+    yield arg.finish()
+  }
+}
+
+export function clientProcedureClientStream<Request, Response>(
   port: unknown | Promise<unknown>,
   method: TsProtoMethodDefinition<Request, Response>
-): ServerStreamingClientMethod<Request, Response> {
+): ClientStreamingMethod<Request, Response> {
+  const fn = async (arg: AsyncIterable<Request>): Promise<Response> => {
+    const remoteModule: Record<typeof method.name, (arg: AsyncIterable<Uint8Array>) => Promise<any>> = (await port) as any
+
+    if (!(method.name in remoteModule)) throw new Error("Method " + method.name + " not implemented in server port")
+
+    const result = await remoteModule[method.name](requestToBinaryGenerator(arg, method))
+
+    return method.responseType.decode(result ?? EMPTY_U8ARRAY)
+  }
+
+  return fn
+}
+
+export function clientProcedureServerStream<Request, Response>(
+  port: unknown | Promise<unknown>,
+  method: TsProtoMethodDefinition<Request, Response>
+): ServerStreamingMethod<Request, Response> {
   const fn = function (arg: Request): AsyncGenerator<Response> {
     let _generator: Promise<AsyncGenerator<Uint8Array>> | undefined = undefined
 
@@ -85,7 +110,30 @@ export function serverProcedureUnary<Request, Response, Context>(
   }
 }
 
-export function serverProcedureStream<Request, Response, Context>(
+async function* binaryToRequestGenerator<Request, Response>(argBinaryGenerator: AsyncIterable<Uint8Array>, method: TsProtoMethodDefinition<Request, Response>): AsyncIterable<Request> {
+  for await (const argBinary of argBinaryGenerator) {
+    const arg = method.requestType.decode(argBinary)
+    yield arg
+  }
+}
+
+export function serverProcedureClientStream<Request, Response, Context>(
+  fn: (arg: AsyncIterable<Request>, context: Context) => Promise<Response>,
+  method: TsProtoMethodDefinition<Request, Response>
+): (arg: AsyncIterable<Uint8Array>, context: Context) => Promise<Uint8Array> {
+  return async function (argBinaryGenerator, context) {
+
+    const result = await fn(binaryToRequestGenerator(argBinaryGenerator, method), context)
+    for await (const argBinary of argBinaryGenerator) {
+      
+    }
+
+    if (!result) throw new Error("Empty or null responses are not allowed. Procedure: " + method.name)
+    return method.responseType.encode(result).finish()
+  }
+}
+
+export function serverProcedureServerStream<Request, Response, Context>(
   fn: (arg: Request, context: Context) => Promise<AsyncGenerator<Response>> | AsyncGenerator<Response>,
   method: TsProtoMethodDefinition<Request, Response>
 ): (arg: Uint8Array, context: Context) => AsyncGenerator<Uint8Array> {
@@ -147,7 +195,9 @@ export function loadService<CallContext = {}, Service extends TsProtoServiceDefi
   const ret: RawClient<any, CallContext> = {} as any
   for (const [key, def] of Object.entries(service.methods)) {
     if (def.responseStream) {
-      ret[key] = clientProcedureStream(portFuture, def)
+      ret[key] = clientProcedureServerStream(portFuture, def)
+    } else if (def.requestStream) {
+      ret[key] = clientProcedureClientStream(portFuture, def)
     } else {
       ret[key] = clientProcedureUnary(portFuture, def)
     }
@@ -168,7 +218,9 @@ export function registerService<CallContext = {}, Service extends TsProtoService
 
     for (const [key, def] of Object.entries(service.methods)) {
       if (def.responseStream) {
-        ret[def.name] = serverProcedureStream(mod[key].bind(mod) as any, def)
+        ret[def.name] = serverProcedureServerStream(mod[key].bind(mod) as any, def)
+      } else if (def.requestStream) {
+        ret[def.name] = serverProcedureClientStream(mod[key].bind(mod) as any, def)
       } else {
         ret[def.name] = serverProcedureUnary(mod[key].bind(mod) as any, def)
       }

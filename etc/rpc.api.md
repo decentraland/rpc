@@ -14,10 +14,10 @@ export type AsyncProcedureResultClient = Promise<Uint8Array | AsyncGenerator<Uin
 export type AsyncProcedureResultServer = Promise<Uint8Array | void> | AsyncGenerator<Uint8Array>;
 
 // @public (undocumented)
-export type CallableProcedureClient = (payload: Uint8Array) => AsyncProcedureResultClient;
+export type CallableProcedureClient = (payload: Uint8Array | AsyncGenerator<Uint8Array>) => AsyncProcedureResultClient;
 
 // @public (undocumented)
-export type CallableProcedureServer<Context> = (payload: Uint8Array, context: Context) => AsyncProcedureResultServer;
+export type CallableProcedureServer<Context> = (payload: Uint8Array | AsyncGenerator<Uint8Array>, context: Context) => AsyncProcedureResultServer;
 
 // @public (undocumented)
 export type ClientModuleDefinition = Record<string, CallableProcedureClient>;
@@ -88,7 +88,7 @@ export type RpcServerPort<Context> = Pick<Emitter<RpcPortEvents>, "on" | "emit">
     readonly portName: string;
     registerModule(moduleName: string, moduleDefinition: ModuleGeneratorFunction<Context>): void;
     loadModule(moduleName: string): Promise<ServerModuleDeclaration<any>>;
-    callProcedure(procedureId: number, argument: Uint8Array, context: Context): AsyncProcedureResultServer;
+    callProcedure(procedureId: number, argument: Uint8Array | AsyncGenerator<Uint8Array>, context: Context): AsyncProcedureResultServer;
     close(): void;
 };
 

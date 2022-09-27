@@ -27,6 +27,7 @@ import {
   StreamMessage,
 } from "./protocol"
 import { ILoggerComponent } from "@well-known-components/interfaces"
+import { AsyncQueue } from "./push-channel"
 
 let lastPortId = 0
 
@@ -312,6 +313,65 @@ export async function sendStream(ackDispatcher: AckDispatcher, transport: Transp
 }
 
 // @internal
+function handleClientStream(
+  ackDispatcher: AckDispatcher,
+  transport: Transport,
+  messageNumber: number
+): AsyncGenerator<Uint8Array> {
+  let lastReceivedSequenceId = 0
+  let isRemoteClosed = false
+
+  const channel = new AsyncQueue<Uint8Array>(sendServerSignals)
+
+  transport.on("close", () => {
+    channel.close(new Error("RPC Transport closed"))
+  })
+
+  transport.on("error", () => {
+    channel.close(new Error("RPC Transport failed"))
+  })
+
+  function sendServerSignals(_channel: AsyncQueue<Uint8Array>, action: "close" | "next") {
+    /*if (action == "close") {
+      dispatcher.removeListener(messageNumber)
+    }*/
+    if (true /*!isRemoteClosed*/) {
+      if (action == "close") {
+        console.log('TODO: Implement close')
+        //transport.sendMessage(closeStreamMessage(messageNumber, lastReceivedSequenceId, streamMessage.portId))
+      } /*else if (action == "next") {
+        if (streamMessage.requireAck) {
+          dispatcher.transport.sendMessage(streamAckMessage(messageNumber, lastReceivedSequenceId, streamMessage.portId))
+        }
+      }*/
+    }
+  }
+
+  // receive a message from the server and send it to the iterable channel
+  function processMessage(message: StreamMessage) {
+    lastReceivedSequenceId = message.sequenceId
+
+    if (message.closed) {
+      // when the server CLOSES the stream, then we raise the flag isRemoteClosed
+      // to prevent sending an extra closeStreamMessage to the server after closing
+      // our channel.
+      // IMPORTANT: If the server closes the connection, then we DONT send the ACK
+      //            back to the server because it is redundant information.
+      isRemoteClosed = true
+      channel.close()
+    } else {
+      channel.enqueue(message.payload)
+    }
+  }
+
+  ackDispatcher.addStreamListener(messageNumber, (message) => {
+    processMessage(message)
+  })
+
+  return channel
+}
+
+// @internal
 export async function handleRequest<Context>(
   ackDispatcher: AckDispatcher,
   request: Request,
@@ -339,7 +399,14 @@ export async function handleRequest<Context>(
     return
   }
 
-  const result = await port.callProcedure(request.procedureId, request.payload, context)
+  let payload: Uint8Array | AsyncGenerator<Uint8Array> = request.payload
+  if (request.clientStream/*Symbol.asyncIterator in request.payload*/) {
+    console.log('handle client stream!')
+    payload = handleClientStream(ackDispatcher, transport, messageNumber)
+  }
+
+  const result = await port.callProcedure(request.procedureId, payload, context)
+
   const response = Response.fromJSON({
     messageIdentifier: calculateMessageIdentifier(RpcMessageTypes.RpcMessageTypes_RESPONSE, messageNumber),
     payload: EMPTY_U8A,
@@ -351,7 +418,7 @@ export async function handleRequest<Context>(
     Response.encode(response, unsafeSyncWriter)
     transport.sendMessage(unsafeSyncWriter.finish())
   } else if (result && Symbol.asyncIterator in result) {
-    const useAck = true//!((Symbol.for('disable-ack') in result) as boolean)
+    const useAck = !(Symbol.for('disable-ack') in result)
     console.log('useAck=', useAck)
     await sendStream(ackDispatcher, transport, result, port.portId, messageNumber, useAck)
   } else {
@@ -422,11 +489,12 @@ export function createRpcServer<Context = {}>(options: CreateRpcServerOptions<Co
       port.on("close", () => events.emit("portClosed", { port, transport }))
     } else if (messageType == RpcMessageTypes.RpcMessageTypes_DESTROY_PORT) {
       await handleDestroyPort(transport, parsedMessage, messageNumber, state)
-    } else if (
-      messageType == RpcMessageTypes.RpcMessageTypes_STREAM_ACK ||
-      messageType == RpcMessageTypes.RpcMessageTypes_STREAM_MESSAGE
-    ) {
+    } else if (messageType == RpcMessageTypes.RpcMessageTypes_STREAM_ACK) {
       ackHelper.receiveAck(parsedMessage, messageNumber)
+    } else if (messageType == RpcMessageTypes.RpcMessageTypes_STREAM_MESSAGE) {
+      console.log('Stream message!')
+      const receivedStreamMessage = parsedMessage as StreamMessage
+      ackHelper.emitStream(messageNumber, receivedStreamMessage)
     } else {
       transport.emit(
         "error",

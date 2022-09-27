@@ -22,6 +22,7 @@ import {
   closeStreamMessage,
   parseProtocolMessage,
   streamAckMessage,
+  streamMessage,
 } from "./protocol/helpers"
 
 const EMPTY_U8 = new Uint8Array(0)
@@ -170,7 +171,10 @@ export function streamFromDispatcher(
 
     if (ret) {
       const [messageType, message] = ret
-      if (messageType == RpcMessageTypes.RpcMessageTypes_STREAM_MESSAGE) {
+      if (messageType == RpcMessageTypes.RpcMessageTypes_STREAM_ACK) {
+        // Note: This is just for close the stream
+        processMessage(message)
+      } else if (messageType == RpcMessageTypes.RpcMessageTypes_STREAM_MESSAGE) {
         processMessage(message)
       } else if (messageType == RpcMessageTypes.RpcMessageTypes_REMOTE_ERROR_RESPONSE) {
         isRemoteClosed = true
@@ -195,21 +199,39 @@ function createProcedure(portId: number, procedureId: number, dispatcher: Messag
     messageIdentifier: 0,
     payload: EMPTY_U8,
     procedureId,
+    clientStream: false
   }
 
   return async function (data) {
     if (data) {
-      callProcedurePacket.payload = data
+      if (!(Symbol.asyncIterator in data)) {
+        callProcedurePacket.payload = data as Uint8Array
+      } else {
+        callProcedurePacket.clientStream = true
+        callProcedurePacket.payload = EMPTY_U8
+      }
     } else {
       callProcedurePacket.payload = EMPTY_U8
     }
+
+
     const ret = parseProtocolMessage(
-      await dispatcher.request((bb, messageNumber) => {
+      await dispatcher.request(async (bb, messageNumber) => {
         callProcedurePacket.messageIdentifier = calculateMessageIdentifier(
           RpcMessageTypes.RpcMessageTypes_REQUEST,
           messageNumber
         )
         Request.encode(callProcedurePacket, bb)
+
+        if (Symbol.asyncIterator in data) {
+          const iterator = data as AsyncGenerator<Uint8Array>
+          let sequenceId = 0
+          for await (const message of iterator) {
+            dispatcher.transport.sendMessage(streamMessage(messageNumber, sequenceId, portId, message))
+            sequenceId += 1
+          }
+        }
+
       })
     )
 
