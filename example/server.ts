@@ -3,7 +3,6 @@ import { RpcServerPort } from "../src/types"
 import expect from "expect"
 import { Book, BookServiceDefinition, GetBookRequest, QueryBooksRequest } from "./api"
 import { streamWithoutAck } from "../src"
-import { ServerStreamingMethodImplementation } from "../src/codegen-types"
 
 // This file creates the server implementation of BookService defined in api.proto
 

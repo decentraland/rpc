@@ -302,7 +302,7 @@ export async function sendServerStream(ackDispatcher: AckDispatcher, transport: 
     reusedStreamMessage.sequenceId = sequenceNumber
     reusedStreamMessage.payload = elem
 
-    // sendWithAck may fail if the transport is closed, effectively ending this
+    // sendStreamMessage may fail if the transport is closed, effectively ending this
     // iterator and the underlying generator. (by exiting this for-await-of)
     // Aditionally, the ack message is used to know WHETHER the client wants to
     // generate another element or cancel the iterator by setting closed=true
@@ -356,16 +356,16 @@ function handleClientStream(
     }
   }
 
-  // receive a message from the server and send it to the iterable channel
+  // receive a message from the client and send it to the iterable channel
   function processMessage(message: StreamMessage) {
     lastReceivedSequenceId = message.sequenceId
     console.log('server:processMessage', message.sequenceId, message.closed)
     if (message.closed) {
-      // when the server CLOSES the stream, then we raise the flag isRemoteClosed
-      // to prevent sending an extra closeStreamMessage to the server after closing
+      // when the client CLOSES the stream, then we raise the flag isRemoteClosed
+      // to prevent sending an extra closeStreamMessage to the client after closing
       // our channel.
-      // IMPORTANT: If the server closes the connection, then we DONT send the ACK
-      //            back to the server because it is redundant information.
+      // IMPORTANT: If the client closes the connection, then we DONT send the ACK
+      //            back to the client because it is redundant information.
       isRemoteClosed = true
       channel.close()
     } else {

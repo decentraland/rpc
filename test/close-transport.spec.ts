@@ -25,14 +25,14 @@ test("Unit: server sendStream doesn't consume an element from the generator unle
 
   const ackDispatcher: AckDispatcher = {
     receiveAck() { },
-    async sendWithAck(data) {
+    async sendStreamMessage(data, useAck) {
       return await (await messageQueue.next()).value
     }
   }
 
   const transport = MemoryTransport()
   const sendMessageSpy = jest.spyOn(transport.client, 'sendMessage')
-  const sendWithAckSpy = jest.spyOn(ackDispatcher, 'sendWithAck')
+  const sendStreamMessageSpy = jest.spyOn(ackDispatcher, 'sendStreamMessage')
 
   function generator() {
     const ret: AsyncGenerator<Uint8Array> = {
@@ -53,7 +53,7 @@ test("Unit: server sendStream doesn't consume an element from the generator unle
     messageQueue.enqueue({ closed: true })
   ])
 
-  expect(sendWithAckSpy).toBeCalledTimes(1)
+  expect(sendStreamMessageSpy).toBeCalledTimes(1)
   expect(sendMessageSpy).toBeCalledTimes(0)
 })
 
@@ -66,14 +66,14 @@ test("Unit: server sendStream finalizes iterator upon failed ACK", async () => {
 
   const ackDispatcher: AckDispatcher = {
     receiveAck() { },
-    async sendWithAck(data) {
+    async sendStreamMessage(data) {
       return await (await messageQueue.next()).value
     }
   }
 
   const transport = MemoryTransport()
   const sendMessageSpy = jest.spyOn(transport.client, 'sendMessage')
-  const sendWithAckSpy = jest.spyOn(ackDispatcher, 'sendWithAck')
+  const sendStreamMessageSpy = jest.spyOn(ackDispatcher, 'sendStreamMessage')
 
   let finalized = false
 
@@ -104,7 +104,7 @@ test("Unit: server sendStream finalizes iterator upon failed ACK", async () => {
 
   expect(finalized).toEqual(true)
 
-  expect(sendWithAckSpy).toBeCalledTimes(3)
+  expect(sendStreamMessageSpy).toBeCalledTimes(3)
   expect(sendMessageSpy).toBeCalledTimes(0)
 })
 
@@ -115,7 +115,7 @@ test("Unit: server sendStream finalizes iterator upon failed ACK", async () => {
 test("Unit: server sendStream sends a close message after iterator finalizes", async () => {
   const ackDispatcher: AckDispatcher = {
     receiveAck() { },
-    async sendWithAck(data) {
+    async sendStreamMessage(data) {
       if (data.sequenceId != 0) throw new Error('never called')
       return Promise.resolve({ closed: false, ack: true } as any)
     }
@@ -154,9 +154,9 @@ test("Unit: AckDispatcher rejects all pending operations on transport error", as
   const ackDispatcher: AckDispatcher = createAckHelper(transport.server)
 
   const promises = Promise.allSettled([
-    ackDispatcher.sendWithAck({ messageIdentifier: calculateMessageIdentifier(0, 1), sequenceId: 1, payload: '' } as any),
-    ackDispatcher.sendWithAck({ messageIdentifier: calculateMessageIdentifier(0, 2), sequenceId: 2, payload: '' } as any),
-    ackDispatcher.sendWithAck({ messageIdentifier: calculateMessageIdentifier(0, 3), sequenceId: 3, payload: '' } as any),
+    ackDispatcher.sendStreamMessage({ messageIdentifier: calculateMessageIdentifier(0, 1), sequenceId: 1, payload: '' } as any, true),
+    ackDispatcher.sendStreamMessage({ messageIdentifier: calculateMessageIdentifier(0, 2), sequenceId: 2, payload: '' } as any, true),
+    ackDispatcher.sendStreamMessage({ messageIdentifier: calculateMessageIdentifier(0, 3), sequenceId: 3, payload: '' } as any, true),
   ])
 
   const error = new Error('Error123')
@@ -179,9 +179,9 @@ test("Unit: AckDispatcher rejects all pending operations on transport close", as
   const ackDispatcher: AckDispatcher = createAckHelper(transport.server)
 
   const promises = Promise.all([
-    ackDispatcher.sendWithAck({ messageIdentifier: calculateMessageIdentifier(0, 1), sequenceId: 1, payload: '' } as any),
-    ackDispatcher.sendWithAck({ messageIdentifier: calculateMessageIdentifier(0, 2), sequenceId: 2, payload: '' } as any),
-    ackDispatcher.sendWithAck({ messageIdentifier: calculateMessageIdentifier(0, 3), sequenceId: 3, payload: '' } as any),
+    ackDispatcher.sendStreamMessage({ messageIdentifier: calculateMessageIdentifier(0, 1), sequenceId: 1, payload: '' } as any, true),
+    ackDispatcher.sendStreamMessage({ messageIdentifier: calculateMessageIdentifier(0, 2), sequenceId: 2, payload: '' } as any, true),
+    ackDispatcher.sendStreamMessage({ messageIdentifier: calculateMessageIdentifier(0, 3), sequenceId: 3, payload: '' } as any, true),
   ])
 
   transport.server.close()

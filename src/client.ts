@@ -267,6 +267,7 @@ function createProcedure(portId: number, procedureId: number, dispatcher: Messag
   
           const callClientStream = async () => {
             for await (const message of iterator) {
+              // TODO: Implement client-side ack
               dispatcher.transport.sendMessage(streamMessage(messageNumber, sequenceId, portId, message))
               sequenceId += 1
             }
