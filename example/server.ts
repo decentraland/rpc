@@ -42,16 +42,29 @@ export function registerBookServiceServerImplementation(port: RpcServerPort<Test
 
       return streamWithoutAck(generator())
     },
-    async getBookStream(req: AsyncGenerator<GetBookRequest>, context) {
+    async getBookStream(req: AsyncIterable<GetBookRequest>, context) {
       for await (const message of req) {
         console.log('Received client stream: ', message)
       }
 
+      console.log('Done!')
       return {
         author: "kuruk",
         isbn: 2077,
         title: "Le protocol",
       }
+    },
+    queryBooksStream(req: AsyncIterable<GetBookRequest>, context: TestContext) {
+      const generator = async function* () {
+        for await (const message of req) {
+          const book = context.hardcodedDatabase.find((book) => book.isbn === message.isbn)
+          if (book) {
+            yield book
+          }
+        }
+      }
+
+      return streamWithoutAck(generator())
     }
   }))
 }

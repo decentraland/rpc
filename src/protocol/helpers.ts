@@ -20,13 +20,40 @@ export function closeStreamMessage(messageNumber: number, sequenceId: number, po
   bb.reset()
   StreamMessage.encode(
     {
-      messageIdentifier: calculateMessageIdentifier(RpcMessageTypes.RpcMessageTypes_STREAM_ACK, messageNumber),
+      messageIdentifier: calculateMessageIdentifier(RpcMessageTypes.RpcMessageTypes_STREAM_MESSAGE, messageNumber),
       sequenceId,
       portId,
       ack: false,
       closed: true,
       payload: EMPTY_U8A,
-      requireAck: false
+      requireAck: false,
+      clientStream: false,
+      serverStream: false
+    },
+    bb
+  )
+  return bb.finish()
+}
+
+export function openStreamMessage(
+  portId: number,
+  messageNumber: number,
+  clientStream: boolean,
+  serverStream: boolean,
+  useAck: boolean
+): Uint8Array {
+  bb.reset()
+  StreamMessage.encode(
+    {
+      messageIdentifier: calculateMessageIdentifier(RpcMessageTypes.RpcMessageTypes_STREAM_MESSAGE, messageNumber),
+      sequenceId: 0,
+      portId,
+      ack: false,
+      closed: false,
+      payload: EMPTY_U8A,
+      requireAck: useAck,
+      clientStream,
+      serverStream
     },
     bb
   )
@@ -48,7 +75,9 @@ export function streamMessage(
       ack: false,
       closed: false,
       payload,
-      requireAck: true
+      requireAck: true,
+      serverStream: false,
+      clientStream: false
     },
     bb
   )
@@ -65,7 +94,9 @@ export function streamAckMessage(messageNumber: number, sequenceId: number, port
       ack: true,
       closed: false,
       payload: EMPTY_U8A,
-      requireAck: true
+      requireAck: true,
+      serverStream: false,
+      clientStream: false
     },
     bb
   )

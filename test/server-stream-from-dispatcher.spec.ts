@@ -5,7 +5,7 @@ import { MemoryTransport } from "../src/transports/Memory"
 import { instrumentMemoryTransports, takeAsync } from "./helpers"
 import { StreamMessage } from "../src/protocol"
 
-describe("streamFromDispatcher", () => {
+describe("serverStreamFromDispatcher", () => {
   it("a CloseMessage from the server closes the iterator in the client.", async () => {
     let seq = 0
     const MESSAGE_NUMBER = 1

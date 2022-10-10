@@ -6,15 +6,12 @@ import { StreamMessage } from "./protocol"
 export type SubsetMessage = Pick<StreamMessage, "closed" | "ack">
 
 export type AckDispatcher = {
-  sendWithAck(data: StreamMessage): Promise<SubsetMessage>
+  sendStreamMessage(data: StreamMessage, useAck: boolean): Promise<SubsetMessage>
   receiveAck(data: StreamMessage, messageNumber: number): void
-  addStreamListener(messageNumber: number, fn: (msg: StreamMessage) => void): void
-  emitStream(messageNumber: number, streamMessage: StreamMessage): void
 }
 
 export function createAckHelper(transport: Transport): AckDispatcher {
   const oneTimeCallbacks = new Map<string, [(msg: SubsetMessage) => void, (err: Error) => void]>()
-  const streams = new Map<number, (msg: StreamMessage) => void>()
   const bb = new Writer()
 
   function closeAll() {
@@ -39,27 +36,23 @@ export function createAckHelper(transport: Transport): AckDispatcher {
         throw new Error("Received a message for an inexistent handler " + key)
       }
     },
-    async sendWithAck(data: StreamMessage): Promise<SubsetMessage> {
-      const [_, messageNumber] = parseMessageIdentifier(data.messageIdentifier)
-      const key = `${messageNumber},${data.sequenceId}`
+    async sendStreamMessage(data: StreamMessage, useAck: boolean): Promise<SubsetMessage> {
+      if (useAck) {
+        const [_, messageNumber] = parseMessageIdentifier(data.messageIdentifier)
+        const key = `${messageNumber},${data.sequenceId}`
 
-      const ret = new Promise<SubsetMessage>(function ackPromise(ret, rej) {
-        oneTimeCallbacks.set(key, [ret, rej])
-      })
+        const ret = new Promise<SubsetMessage>(function ackPromise(ret, rej) {
+          oneTimeCallbacks.set(key, [ret, rej])
+        })
 
-      bb.reset()
-      StreamMessage.encode(data, bb)
-      transport.sendMessage(bb.finish())
+        bb.reset()
+        StreamMessage.encode(data, bb)
+        transport.sendMessage(bb.finish())
 
-      return ret
-    },
-    addStreamListener(messageNumber: number, fn: (msg: StreamMessage) => void) {
-      streams.set(messageNumber, fn)
-    },
-    emitStream(messageNumber: number, streamMessage: StreamMessage) {
-      const stream = streams.get(messageNumber)
-      if (stream) {
-        stream(streamMessage)
+        return ret
+      } else {
+        // TODO: Handle closed=true with a close streaming from client
+        return Promise.resolve({ closed: true, ack: false })
       }
     }
   }

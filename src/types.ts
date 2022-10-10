@@ -41,11 +41,11 @@ export type AsyncProcedureResultClient = Promise<Uint8Array | AsyncGenerator<Uin
 /**
  * @public
  */
-export type CallableProcedureServer<Context> = (payload: Uint8Array | AsyncGenerator<Uint8Array>, context: Context) => AsyncProcedureResultServer
+export type CallableProcedureServer<Context> = (payload: Uint8Array | AsyncIterable<Uint8Array>, context: Context) => AsyncProcedureResultServer
 /**
  * @public
  */
-export type CallableProcedureClient = (payload: Uint8Array | AsyncGenerator<Uint8Array>) => AsyncProcedureResultClient
+export type CallableProcedureClient = (payload: Uint8Array | AsyncIterable<Uint8Array>) => AsyncProcedureResultClient
 /**
  * @public
  */

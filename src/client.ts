@@ -25,6 +25,10 @@ import {
   streamMessage,
 } from "./protocol/helpers"
 
+function timeout(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 const EMPTY_U8 = new Uint8Array(0)
 
 // @internal
@@ -193,6 +197,23 @@ export function streamFromDispatcher(
 }
 
 // @internal
+function waitForResponse(messageNumber: number, dispatcher: MessageDispatcher) {
+  return new Promise<Uint8Array>(function (resolve) {
+    dispatcher.addListener(messageNumber, (reader) => {
+      const ret = parseProtocolMessage(reader)
+  
+      if (ret) {
+        const [messageType, message] = ret
+        if (messageType == RpcMessageTypes.RpcMessageTypes_RESPONSE) {
+          console.log('client:RESPONSE!!')
+          resolve(message.payload)
+        }
+      }
+    })
+  })
+}
+
+// @internal
 function createProcedure(portId: number, procedureId: number, dispatcher: MessageDispatcher): CallableProcedureClient {
   const callProcedurePacket = {
     portId,
@@ -203,12 +224,14 @@ function createProcedure(portId: number, procedureId: number, dispatcher: Messag
   }
 
   return async function (data) {
+
+    // TODO: Move to a function helper
     if (data) {
-      if (!(Symbol.asyncIterator in data)) {
-        callProcedurePacket.payload = data as Uint8Array
-      } else {
+      if (Symbol.asyncIterator in data) {
         callProcedurePacket.clientStream = true
         callProcedurePacket.payload = EMPTY_U8
+      } else {
+        callProcedurePacket.payload = data as Uint8Array
       }
     } else {
       callProcedurePacket.payload = EMPTY_U8
@@ -216,27 +239,18 @@ function createProcedure(portId: number, procedureId: number, dispatcher: Messag
 
 
     const ret = parseProtocolMessage(
-      await dispatcher.request(async (bb, messageNumber) => {
+      await dispatcher.request((bb, messageNumber) => {
         callProcedurePacket.messageIdentifier = calculateMessageIdentifier(
           RpcMessageTypes.RpcMessageTypes_REQUEST,
           messageNumber
         )
         Request.encode(callProcedurePacket, bb)
-
-        if (Symbol.asyncIterator in data) {
-          const iterator = data as AsyncGenerator<Uint8Array>
-          let sequenceId = 0
-          for await (const message of iterator) {
-            dispatcher.transport.sendMessage(streamMessage(messageNumber, sequenceId, portId, message))
-            sequenceId += 1
-          }
-        }
-
       })
     )
 
     if (ret) {
       const [messageType, message, messageNumber] = ret
+
       if (messageType == RpcMessageTypes.RpcMessageTypes_RESPONSE) {
         const u8 = (message as Response).payload
         if (u8.length) {
@@ -245,10 +259,39 @@ function createProcedure(portId: number, procedureId: number, dispatcher: Messag
           return undefined
         }
       } else if (messageType == RpcMessageTypes.RpcMessageTypes_STREAM_MESSAGE) {
-        // If a StreamMessage is received, then it means we have the POSSIBILITY
+        const openStreamMessage = message as StreamMessage
+
+        if (openStreamMessage.clientStream) {
+          const iterator = data as AsyncIterable<Uint8Array>
+          let sequenceId = 0
+  
+          const callClientStream = async () => {
+            for await (const message of iterator) {
+              dispatcher.transport.sendMessage(streamMessage(messageNumber, sequenceId, portId, message))
+              sequenceId += 1
+            }
+
+            console.log('client: close stream!!')
+            dispatcher.transport.sendMessage(closeStreamMessage(messageNumber, sequenceId, portId))
+          }
+
+          if (openStreamMessage.serverStream) {
+            callClientStream().catch((e) => console.log('client:catch callClientStream: ', e)) // TODO: Cerrar todos los client/server streams
+          } else {
+            await callClientStream() // wait for the streams ends
+
+            const res = await waitForResponse(messageNumber, dispatcher)
+
+            return res
+          }
+        }
+
+        // if we reach here, is a server stream
+
+        // If a OpenStream is received with an serverStream, then it means we have the POSSIBILITY
         // to consume a remote generator. Look into the streamFromDispatcher functions
         // for more information.
-        return streamFromDispatcher(dispatcher, message, messageNumber)
+        return streamFromDispatcher(dispatcher, message, messageNumber) 
       } else if (messageType == RpcMessageTypes.RpcMessageTypes_REMOTE_ERROR_RESPONSE) {
         throwIfRemoteError(message)
       }

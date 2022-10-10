@@ -1,4 +1,4 @@
-import { RpcClient, sendStream } from "../src"
+import { RpcClient, sendServerStream } from "../src"
 import { calculateMessageIdentifier } from "../src/protocol/helpers"
 import { RpcMessageHeader, RpcMessageTypes, StreamMessage } from "../src/protocol"
 import { createSimpleTestEnvironment, delay } from "./helpers"
@@ -45,7 +45,7 @@ test("Unit: server sendStream doesn't consume an element from the generator unle
   }
 
   await Promise.all([
-    sendStream(ackDispatcher, transport.client, generator(), 0, 0).catch(log),
+    sendServerStream(ackDispatcher, transport.client, generator(), 0, 0).catch(log),
     // this message responds to the "stream offer" by closing it.
     // IN SOME CASES, the client may not need to consume the stream. Since we are
     // creating a "safe" API to handle resources and possibly signatures in the
@@ -93,7 +93,7 @@ test("Unit: server sendStream finalizes iterator upon failed ACK", async () => {
   }
 
   await Promise.all([
-    sendStream(ackDispatcher, transport.client, generator(), 0, 0).catch(log),
+    sendServerStream(ackDispatcher, transport.client, generator(), 0, 0).catch(log),
     // this message responds to the "stream offer"
     messageQueue.enqueue({ ack: true, closed: false }),
     // this message asks for an element of the stream to be consumed
@@ -139,7 +139,7 @@ test("Unit: server sendStream sends a close message after iterator finalizes", a
     return ret
   }
 
-  await sendStream(ackDispatcher, transport.client, generator(), 0, 0)
+  await sendServerStream(ackDispatcher, transport.client, generator(), 0, 0)
 
   expect(sendMessageSpy).toBeCalledTimes(1)
 })

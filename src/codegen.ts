@@ -9,6 +9,7 @@ import {
   RawServiceImplementation,
   MethodImplementation,
   ClientStreamingMethod,
+  BidirectionalStreamingMethod,
 } from "./codegen-types"
 import { CallableProcedureClient, RpcClientPort, RpcServerPort } from "./types"
 
@@ -36,6 +37,7 @@ async function* requestToBinaryGenerator<Request, Response>(requests: AsyncItera
     const arg = method.requestType.encode(request)
     yield arg.finish()
   }
+  console.log('codegen: requestToBinaryGenerator done!')
 }
 
 export function clientProcedureClientStream<Request, Response>(
@@ -97,6 +99,48 @@ export function clientProcedureServerStream<Request, Response>(
   return fn
 }
 
+export function clientProcedureBidirectionalStream<Request, Response>(
+  port: unknown | Promise<unknown>,
+  method: TsProtoMethodDefinition<Request, Response>
+): BidirectionalStreamingMethod<Request, Response> {
+  const fn = function (arg: AsyncIterable<Request>): AsyncGenerator<Response> {
+    let _generator: Promise<AsyncGenerator<Uint8Array>> | undefined = undefined
+
+    async function lazyGenerator() {
+      const remoteModule: Record<typeof method.name, (arg: AsyncIterable<Uint8Array>) => Promise<any>> = (await port) as any
+      if (!(method.name in remoteModule)) throw new Error("Method " + method.name + " not implemented in server port")
+      return (await remoteModule[method.name](requestToBinaryGenerator(arg, method)))[Symbol.asyncIterator]()
+    }
+
+    function getGenerator() {
+      if (!_generator) {
+        _generator = lazyGenerator()
+      }
+      return _generator!
+    }
+
+    const ret: AsyncGenerator<Response> = {
+      [Symbol.asyncIterator]: () => ret,
+      async next() {
+        const iter = await (await getGenerator()).next()
+        return { value: method.responseType.decode(iter.value ?? EMPTY_U8ARRAY), done: iter.done }
+      },
+      async return(value) {
+        const iter = await (await getGenerator()).return(value)
+        return { value: iter.value ? method.responseType.decode(iter.value) : iter.value, done: iter.done }
+      },
+      async throw(value) {
+        const iter = await (await getGenerator()).throw(value)
+        return { value: iter.value ? method.responseType.decode(iter.value) : iter.value, done: iter.done }
+      }
+    }
+
+    return ret
+  }
+
+  return fn
+}
+
 export function serverProcedureUnary<Request, Response, Context>(
   fn: (arg: Request, context: Context) => Promise<Response>,
   method: TsProtoMethodDefinition<Request, Response>
@@ -124,9 +168,6 @@ export function serverProcedureClientStream<Request, Response, Context>(
   return async function (argBinaryGenerator, context) {
 
     const result = await fn(binaryToRequestGenerator(argBinaryGenerator, method), context)
-    for await (const argBinary of argBinaryGenerator) {
-      
-    }
 
     if (!result) throw new Error("Empty or null responses are not allowed. Procedure: " + method.name)
     return method.responseType.encode(result).finish()
@@ -177,6 +218,48 @@ export function serverProcedureServerStream<Request, Response, Context>(
   }
 }
 
+export function serverProcedureBidirectionalStream<Request, Response, Context>(
+  fn: (arg: AsyncIterable<Request>, context: Context) => Promise<AsyncGenerator<Response>> | AsyncGenerator<Response>,
+  method: TsProtoMethodDefinition<Request, Response>
+): (arg: AsyncIterable<Uint8Array>, context: Context) => AsyncGenerator<Uint8Array> {
+  return function (argBinaryGenerator, context): AsyncGenerator<Uint8Array> {
+    let _generator: Promise<AsyncGenerator<Response>> | undefined = undefined
+
+    async function lazyGenerator() {
+      const result = (await fn(binaryToRequestGenerator(argBinaryGenerator, method), context))
+
+      if (!result) throw new Error("Empty or null responses are not allowed. Procedure: " + method.name)
+
+      return result[Symbol.asyncIterator]()
+    }
+
+    function getGenerator() {
+      if (!_generator) {
+        _generator = lazyGenerator()
+      }
+      return _generator!
+    }
+
+    const ret: AsyncGenerator<Uint8Array> = {
+      [Symbol.asyncIterator]: () => ret,
+      async next() {
+        const iter = await (await getGenerator()).next()
+        return { value: iter.value ? method.responseType.encode(iter.value).finish() : iter.value, done: iter.done }
+      },
+      async return(value) {
+        const iter = await (await getGenerator()).return(value)
+        return { value: iter.value ? method.responseType.encode(iter.value).finish() : iter.value, done: iter.done }
+      },
+      async throw(value) {
+        const iter = await (await getGenerator()).throw(value)
+        return { value: iter.value ? method.responseType.encode(iter.value).finish() : iter.value, done: iter.done }
+      }
+    }
+
+    return ret
+  }
+}
+
 export type RpcClientModule<Service extends TsProtoServiceDefinition, CallContext = {}> = RawClient<
   FromTsProtoServiceDefinition<Service>,
   CallContext
@@ -194,7 +277,9 @@ export function loadService<CallContext = {}, Service extends TsProtoServiceDefi
   const portFuture = port.loadModule(service.name)
   const ret: RawClient<any, CallContext> = {} as any
   for (const [key, def] of Object.entries(service.methods)) {
-    if (def.responseStream) {
+    if (def.responseStream && def.requestStream) {
+      ret[key] = clientProcedureBidirectionalStream(portFuture, def)
+    } else if (def.responseStream) {
       ret[key] = clientProcedureServerStream(portFuture, def)
     } else if (def.requestStream) {
       ret[key] = clientProcedureClientStream(portFuture, def)
@@ -217,7 +302,9 @@ export function registerService<CallContext = {}, Service extends TsProtoService
     const ret: Record<string, any> = {}
 
     for (const [key, def] of Object.entries(service.methods)) {
-      if (def.responseStream) {
+      if (def.responseStream && def.requestStream) {
+        ret[def.name] = serverProcedureBidirectionalStream(mod[key].bind(mod) as any, def)
+      } else if (def.responseStream) {
         ret[def.name] = serverProcedureServerStream(mod[key].bind(mod) as any, def)
       } else if (def.requestStream) {
         ret[def.name] = serverProcedureClientStream(mod[key].bind(mod) as any, def)

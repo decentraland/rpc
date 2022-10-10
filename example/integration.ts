@@ -8,6 +8,10 @@
 import { createRpcClient, createRpcServer } from "../src/index"
 import { registerBookServiceServerImplementation, TestContext } from "./server"
 
+function timeout(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 // this emulates a server context with components
 const context: TestContext = {
   hardcodedDatabase: [
@@ -44,12 +48,14 @@ rpcServer.attachTransport(serverSocket, context)
 
 import { createBookServiceClient } from "./client"
 import expect from "expect"
-import { Book } from "./api"
+import { Book, GetBookRequest } from "./api"
 
-async function* bookGenerator() {
+async function* bookRequestGenerator() {
   for (const book of context.hardcodedDatabase) {
-    yield book;
+    const request: GetBookRequest = { isbn: book.isbn }
+    yield request
   }
+  console.log('request generator done!')
 }
 
 async function handleClientCreation() {
@@ -73,19 +79,27 @@ async function handleClientCreation() {
     title: "Rpc onion layers",
   })
 
+  console.log("> Server stream")
   const list: Book[] = []
   for await (const book of clientBookService.queryBooks({ authorPrefix: "mr" })) {
     list.push(book)
+    console.log(book)
   }
   expect(list).toEqual(context.hardcodedDatabase)
 
-  const streamResponse = await clientBookService.getBookStream(bookGenerator())
+  console.log("> Client stream")
+  const streamResponse = await clientBookService.getBookStream(bookRequestGenerator())
   console.log("  Response: ", streamResponse)
   expect(streamResponse).toEqual({
     author: "kuruk",
     isbn: 2077,
     title: "Le protocol",
   })
+
+  console.log("> Bidirectional stream:")
+  for await (const book of clientBookService.queryBooksStream(bookRequestGenerator())) {
+    console.log(book)
+  }
 }
 
 handleClientCreation().catch((err) => {

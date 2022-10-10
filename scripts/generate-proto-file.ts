@@ -32,7 +32,7 @@ proto.addEnum("RpcMessageTypes", {
   REMOTE_ERROR_RESPONSE: 9,
   DESTROY_PORT: 10,
 
-  SERVER_READY: 11,
+  SERVER_READY: 11
 })
 
 /////////////////////////////////////////////////////////////
@@ -107,7 +107,7 @@ proto.addMessage(
   [
     PORT_ID,
     field("fixed32", "procedure_id", 4), // id of the procedure to be called
-    field("bool", "client_stream", 5), // TEMP: Until we find a better way
+    field("bool", "client_stream", 5),
     PAYLOAD, // payload of the request (this protocol doesn't care about the content)
   ],
   ["RpcMessageHeader"]
@@ -144,7 +144,7 @@ proto.addMessage(
  *              with async iterators in mind (think about js sagas).
  * @direction   Server->Client/Client->Server
  */
-proto.addMessage(
+ proto.addMessage(
   "StreamMessage",
   [
     PORT_ID,
@@ -153,6 +153,8 @@ proto.addMessage(
     field("bool", "closed", 7), // Server->Client/Client->Server an empty message signaling the end of the stream
     field("bool", "ack", 8), // Client->Server used for backpressure
     field("bool", "require_ack", 9), // Server->Client used to know if the stream will use `ack`
+    field("bool", "client_stream", 10), // Open client stream
+    field("bool", "server_stream", 11), // Open server stream
   ],
   ["RpcMessageHeader"]
 )

@@ -1,9 +1,37 @@
-import { streamWithoutAck } from "../src"
+import { RpcClient } from "../src"
 import { log } from "./logger"
 import { createSimpleTestEnvironment, delay } from "./helpers"
 import { pushableChannel } from "../src/push-channel"
+import mitt from "mitt"
 
-describe("Stream without ACK", () => {
+async function testPort(rpcClient: RpcClient, portName: string) {
+  log(`> Creating Port ${portName}`)
+
+  log("> Loading module echo")
+  const port = await rpcClient.createPort(portName)
+  const module = (await port.loadModule("echo")) as {
+    basic(): Promise<Uint8Array>
+    getPortId(): Promise<Uint8Array>
+    identity(data: Uint8Array): Promise<Uint8Array>
+  }
+
+  expect(module).toHaveProperty("basic")
+  expect(module).toHaveProperty("getPortId")
+  expect(module).toHaveProperty("identity")
+
+  const result = await module.basic()
+  expect(result).toEqual(Uint8Array.from([0, 1, 2]))
+  const getPortId = await module.getPortId()
+  expect(getPortId).toEqual(Uint8Array.from([port.portId % 0xff]))
+  const identity1 = await module.identity(Uint8Array.from([3]))
+  expect(identity1).toEqual(Uint8Array.from([3]))
+  const identity2 = await module.identity(Uint8Array.from([4]))
+  expect(identity2).toEqual(Uint8Array.from([4]))
+
+  return port
+}
+
+describe("Server stream Helpers simple req/res", () => {
   let remoteCallCounter = 0
   let channel: ReturnType<typeof pushableChannel>
   const testEnv = createSimpleTestEnvironment<void>(async function (port) {
@@ -14,17 +42,14 @@ describe("Stream without ACK", () => {
         yield Uint8Array.from([1])
         yield Uint8Array.from([2])
         yield Uint8Array.from([3])
-        return streamWithoutAck
       },
       async *throwFirst() {
         log('Will throw!')
         throw new Error("safe error 1")
-        return streamWithoutAck
       },
       async *throwSecond() {
         yield Uint8Array.from([0])
         throw new Error("safe error 2")
-        return streamWithoutAck
       },
       async *infiniteCounter() {
         let counter = 0
@@ -34,7 +59,6 @@ describe("Stream without ACK", () => {
           log("infiniteCounter yielding #" + counter + " " + (counter % 0xff))
           yield new Uint8Array([counter % 0xff])
         }
-        return streamWithoutAck
       },
       async *parameterCounter(data) {
         let total = data[0]
@@ -42,7 +66,6 @@ describe("Stream without ACK", () => {
           total--
           yield new Uint8Array([total % 0xff])
         }
-        return streamWithoutAck
       },
     }))
   })
