@@ -52,7 +52,7 @@ export function createAckHelper(transport: Transport): AckDispatcher {
         return ret
       } else {
         // TODO: Handle closed=true with a close streaming from client
-        return Promise.resolve({ closed: true, ack: false })
+        return Promise.resolve({ closed: false, ack: false })
       }
     }
   }

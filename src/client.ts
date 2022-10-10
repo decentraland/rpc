@@ -25,10 +25,6 @@ import {
   streamMessage,
 } from "./protocol/helpers"
 
-function timeout(ms: number) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
 const EMPTY_U8 = new Uint8Array(0)
 
 // @internal
@@ -279,6 +275,8 @@ function createProcedure(portId: number, procedureId: number, dispatcher: Messag
           if (openStreamMessage.serverStream) {
             callClientStream().catch((e) => console.log('client:catch callClientStream: ', e)) // TODO: Cerrar todos los client/server streams
           } else {
+
+            // TODO: Quitar el await
             await callClientStream() // wait for the streams ends
 
             const res = await waitForResponse(messageNumber, dispatcher)
