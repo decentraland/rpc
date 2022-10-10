@@ -131,7 +131,7 @@ export type RpcServerPort<Context> = Pick<Emitter<RpcPortEvents>, "on" | "emit">
    * Used to load modules based on their definition and availability.
    */
   loadModule(moduleName: string): Promise<ServerModuleDeclaration<any>>
-  callProcedure(procedureId: number, argument: Uint8Array | AsyncGenerator<Uint8Array>, context: Context): AsyncProcedureResultServer
+  callProcedure(procedureId: number, argument: Uint8Array | AsyncIterable<Uint8Array>, context: Context): AsyncProcedureResultServer
   close(): void
 }
 

@@ -1,48 +1,106 @@
-import { Transport } from "."
-import { Writer,Reader } from "protobufjs/minimal"
-import { parseMessageIdentifier } from "./protocol/helpers"
-import { RpcMessageHeader } from "./protocol"
-let globalMessageNumber = 0
+import { Transport } from "./types"
+import { Writer, Reader } from "protobufjs/minimal"
+import { parseMessageIdentifier, parseProtocolMessage } from "./protocol/helpers"
+import { RpcMessageTypes, StreamMessage } from "./protocol"
 
+export type SubsetMessage = Pick<StreamMessage, "closed" | "ack">
 export type SendableMessage = {
   messageIdentifier: number
 }
+type ReaderCallback = (reader: Reader, messageType: number, messageNumber: number, message: any) => void
 
 export type MessageDispatcher = {
   transport: Transport
-  request(cb: (bb: Writer, messageNumber: number) => void): Promise<Reader>
-  addListener(messageId: number, handler: (reader: Reader) => void): void
-  removeListener(messageId: number): void
+  sendStreamMessage(data: StreamMessage, useAck: boolean): Promise<SubsetMessage>
+  addListener(messageNumber: number, handler: ReaderCallback): void
+  addOneTimeListener(messageNumber: number, handler: ReaderCallback): void
+  removeListener(messageNumber: number): void
+  setGlobalHandler(globalHandler: GlobalHandlerFunction): void
 }
+
+export type GlobalHandlerFunction = (messageType: number, parsedMessage: any, messageNumber: number) => void
 
 export function messageNumberHandler(transport: Transport): MessageDispatcher {
   // message_number -> future
-  type ReaderCallback = (reader: Reader) => void
   const oneTimeCallbacks = new Map<number, ReaderCallback>()
-  const listeners = new Map<number, (reader: Reader) => void>()
+  const listeners = new Map<number, ReaderCallback>()
+
+  let globalHandlerFunction: GlobalHandlerFunction | undefined
 
   transport.on("message", (message) => {
-    const reader = Reader.create(message)
-    const header = RpcMessageHeader.decode(reader)
-    const [_, messageNumber] = parseMessageIdentifier(header.messageIdentifier)
+    try {
+      const reader = Reader.create(message)
+      const parsedMessage = parseProtocolMessage(reader)
+      if (parsedMessage) {
+        const [messageType, message, messageNumber] = parsedMessage
 
-    if (messageNumber > 0) {
-      const fut = oneTimeCallbacks.get(messageNumber)
-      if (fut) {
-        reader.pos = 0
-        fut(reader)
-        oneTimeCallbacks.delete(messageNumber)
+        if (globalHandlerFunction) globalHandlerFunction(messageType, message, messageNumber)
+
+        if (messageNumber > 0) {
+          const fut = oneTimeCallbacks.get(messageNumber)
+          try {
+            if (fut) {
+              reader.pos = 0
+              fut(reader, messageType, messageNumber, message)
+              oneTimeCallbacks.delete(messageNumber)
+            }
+            const handler = listeners.get(messageNumber)
+            if (handler) {
+              reader.pos = 0
+              handler(reader, messageType, messageNumber, message)
+            }
+            if (
+              messageType == RpcMessageTypes.RpcMessageTypes_STREAM_ACK ||
+              messageType == RpcMessageTypes.RpcMessageTypes_STREAM_MESSAGE
+            ) {
+              receiveAck(message, messageNumber)
+            }
+          } catch (err: any) {
+            transport.emit("error", err)
+          }
+        }
+      } else {
+        transport.emit("error", new Error(`Transport received unknown message: ${message}`))
       }
-      const handler = listeners.get(messageNumber)
-      if (handler) {
-        reader.pos = 0
-        handler(reader)
-      }
+    } catch (err: any) {
+      transport.emit("error", err)
     }
   })
 
+  const ackCallbacks = new Map<string, [(msg: SubsetMessage) => void, (err: Error) => void]>()
+
+  const bb = new Writer()
+
+  function closeAll() {
+    ackCallbacks.forEach(([resolve]) => resolve({ closed: true, ack: false }))
+    ackCallbacks.clear()
+  }
+
+  transport.on("close", closeAll)
+  transport.on("error", (err) => {
+    ackCallbacks.forEach(([, reject]) => reject(err))
+    ackCallbacks.clear()
+  })
+
+  function receiveAck(data: StreamMessage, messageNumber: number) {
+    const key = `${messageNumber},${data.sequenceId}`
+    const fut = ackCallbacks.get(key)
+    if (fut) {
+      ackCallbacks.delete(key)
+      fut[0](data)
+    // } else {
+    //   throw new Error("Received an ACK message for an inexistent handler " + key)
+    }
+  }
+
   return {
     transport,
+    setGlobalHandler(handler: GlobalHandlerFunction) {
+      globalHandlerFunction = handler
+    },
+    addOneTimeListener(messageId: number, handler: ReaderCallback) {
+      oneTimeCallbacks.set(messageId, handler)
+    },
     addListener(messageId: number, handler) {
       if (listeners.has(messageId)) throw new Error("There is already a handler for messageId " + messageId)
       listeners.set(messageId, handler)
@@ -51,15 +109,25 @@ export function messageNumberHandler(transport: Transport): MessageDispatcher {
       if (!listeners.has(messageId)) throw new Error("A handler is missing for messageId " + messageId)
       listeners.delete(messageId)
     },
-    async request(cb: (bb: Writer, messageNumber: number) => void): Promise<Reader> {
-      const messageNumber = ++globalMessageNumber
-      if (globalMessageNumber > 0x01000000) globalMessageNumber = 0
-      return new Promise<Reader>((resolve) => {
-        oneTimeCallbacks.set(messageNumber, resolve)
-        const bb = new Writer()
-        cb(bb, messageNumber)
+
+    async sendStreamMessage(data: StreamMessage, useAck: boolean): Promise<SubsetMessage> {
+      if (useAck) {
+        const [_, messageNumber] = parseMessageIdentifier(data.messageIdentifier)
+        const key = `${messageNumber},${data.sequenceId}`
+
+        const ret = new Promise<SubsetMessage>(function ackPromise(ret, rej) {
+          ackCallbacks.set(key, [ret, rej])
+        })
+
+        bb.reset()
+        StreamMessage.encode(data, bb)
         transport.sendMessage(bb.finish())
-      })
+
+        return ret
+      } else {
+        // TODO: Handle closed=true with a close streaming from client
+        return Promise.resolve({ closed: false, ack: false })
+      }
     },
   }
 }

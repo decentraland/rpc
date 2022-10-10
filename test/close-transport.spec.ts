@@ -25,14 +25,14 @@ test("Unit: server sendStream doesn't consume an element from the generator unle
 
   const ackDispatcher: AckDispatcher = {
     receiveAck() { },
-    async sendStreamMessage(data, useAck) {
+    async sendStreamMessage(data) {
       return await (await messageQueue.next()).value
     }
   }
 
   const transport = MemoryTransport()
   const sendMessageSpy = jest.spyOn(transport.client, 'sendMessage')
-  const sendStreamMessageSpy = jest.spyOn(ackDispatcher, 'sendStreamMessage')
+  const sendWithAckSpy = jest.spyOn(ackDispatcher, 'sendStreamMessage')
 
   function generator() {
     const ret: AsyncGenerator<Uint8Array> = {
@@ -53,7 +53,7 @@ test("Unit: server sendStream doesn't consume an element from the generator unle
     messageQueue.enqueue({ closed: true })
   ])
 
-  expect(sendStreamMessageSpy).toBeCalledTimes(1)
+  expect(sendWithAckSpy).toBeCalledTimes(1)
   expect(sendMessageSpy).toBeCalledTimes(0)
 })
 
@@ -73,7 +73,7 @@ test("Unit: server sendStream finalizes iterator upon failed ACK", async () => {
 
   const transport = MemoryTransport()
   const sendMessageSpy = jest.spyOn(transport.client, 'sendMessage')
-  const sendStreamMessageSpy = jest.spyOn(ackDispatcher, 'sendStreamMessage')
+  const sendWithAckSpy = jest.spyOn(ackDispatcher, 'sendStreamMessage')
 
   let finalized = false
 
@@ -104,7 +104,7 @@ test("Unit: server sendStream finalizes iterator upon failed ACK", async () => {
 
   expect(finalized).toEqual(true)
 
-  expect(sendStreamMessageSpy).toBeCalledTimes(3)
+  expect(sendWithAckSpy).toBeCalledTimes(3)
   expect(sendMessageSpy).toBeCalledTimes(0)
 })
 

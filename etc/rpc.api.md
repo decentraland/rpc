@@ -88,7 +88,7 @@ export type RpcServerPort<Context> = Pick<Emitter<RpcPortEvents>, "on" | "emit">
     readonly portName: string;
     registerModule(moduleName: string, moduleDefinition: ModuleGeneratorFunction<Context>): void;
     loadModule(moduleName: string): Promise<ServerModuleDeclaration<any>>;
-    callProcedure(procedureId: number, argument: Uint8Array | AsyncGenerator<Uint8Array>, context: Context): AsyncProcedureResultServer;
+    callProcedure(procedureId: number, argument: Uint8Array | AsyncIterable<Uint8Array>, context: Context): AsyncProcedureResultServer;
     close(): void;
 };
 

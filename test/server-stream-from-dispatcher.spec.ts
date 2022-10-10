@@ -17,7 +17,7 @@ describe("serverStreamFromDispatcher", () => {
     // create a client stream for the server
     const clientStream = streamFromDispatcher(
       dispatcher,
-      StreamMessage.decode(streamMessage(MESSAGE_NUMBER, seq++, PORT_ID, Uint8Array.of())),
+      PORT_ID,
       MESSAGE_NUMBER
     )
 
@@ -47,7 +47,7 @@ describe("serverStreamFromDispatcher", () => {
     // create a client stream for the server
     const clientStream = streamFromDispatcher(
       dispatcher,
-      StreamMessage.decode(streamMessage(MESSAGE_NUMBER, seq++, PORT_ID, Uint8Array.of())),
+      PORT_ID,
       MESSAGE_NUMBER
     )
 
@@ -84,7 +84,7 @@ describe("serverStreamFromDispatcher", () => {
     // create a client stream for the server
     const clientStream = streamFromDispatcher(
       dispatcher,
-      StreamMessage.decode(streamMessage(MESSAGE_NUMBER, seq++, PORT_ID, new Uint8Array())),
+      PORT_ID,
       MESSAGE_NUMBER
     )
 
@@ -106,7 +106,7 @@ describe("serverStreamFromDispatcher", () => {
     const dispatcher = messageNumberHandler(transport.client)
     const clientStream = streamFromDispatcher(
       dispatcher,
-      StreamMessage.decode(streamMessage(MESSAGE_NUMBER, seq++, 0, Uint8Array.of())),
+      0,
       MESSAGE_NUMBER
     )
 
@@ -132,7 +132,7 @@ describe("serverStreamFromDispatcher", () => {
     // create a client stream for the server
     const clientStream = streamFromDispatcher(
       dispatcher,
-      StreamMessage.decode(streamMessage(MESSAGE_NUMBER, seq++, PORT_ID, Uint8Array.of())),
+      PORT_ID,
       MESSAGE_NUMBER
     )
 
@@ -165,7 +165,7 @@ describe("serverStreamFromDispatcher", () => {
     // create a client stream for the server
     const clientStream = streamFromDispatcher(
       dispatcher,
-      StreamMessage.decode(streamMessage(MESSAGE_NUMBER, seq++, PORT_ID, Uint8Array.of())),
+      PORT_ID,
       MESSAGE_NUMBER
     )
 

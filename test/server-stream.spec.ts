@@ -1,8 +1,9 @@
 import { RpcClient } from "../src"
 import { log } from "./logger"
-import { createSimpleTestEnvironment, delay } from "./helpers"
+import { createSimpleTestEnvironment, delay, takeAsync } from "./helpers"
 import { pushableChannel } from "../src/push-channel"
 import mitt from "mitt"
+import future from "fp-future"
 
 async function testPort(rpcClient: RpcClient, portName: string) {
   log(`> Creating Port ${portName}`)
@@ -44,7 +45,7 @@ describe("Server stream Helpers simple req/res", () => {
         yield Uint8Array.from([3])
       },
       async *throwFirst() {
-        log('Will throw!')
+        log("Will throw!")
         throw new Error("safe error 1")
       },
       async *throwSecond() {
@@ -65,6 +66,29 @@ describe("Server stream Helpers simple req/res", () => {
         while (total > 0) {
           total--
           yield new Uint8Array([total % 0xff])
+        }
+      },
+      async clientStreamConsumedCompletely(stream) {
+        if (stream instanceof Uint8Array) throw new Error('argument is not stream')
+        const arr: Uint8Array[] = []
+        await consumeInto(stream, arr)
+        return Uint8Array.from(Buffer.concat(arr))
+      },
+      async consumeCompleteStreamAsynchronously(stream) {
+        if (stream instanceof Uint8Array) throw new Error('argument is not stream')
+        const arr: Uint8Array[] = []
+        void consumeInto(stream, arr)
+        return Uint8Array.from(Buffer.concat(arr))
+      },
+      async consume100FromClientStream(stream): Promise<Uint8Array> {
+        if (stream instanceof Uint8Array) throw new Error('argument is not stream')
+        const r = await takeAsync(stream, 100)
+        return Uint8Array.from([r.length])
+      },
+      async *synchronousBidirectionalStream(stream) {
+        if (stream instanceof Uint8Array) throw new Error('argument is not stream')
+        for await (const $ of stream) {
+          yield Uint8Array.from([$[0], $[0] * 2])
         }
       },
     }))
@@ -185,4 +209,112 @@ describe("Server stream Helpers simple req/res", () => {
 
     expect(remoteCallCounter).toEqual(localCallCounter)
   })
+
+  describe.only("clientStream", () => {
+    it("client is consumed completely", async () => {
+      const { rpcClient } = await testEnv.start()
+      const port = await rpcClient.createPort("test1")
+      const module = (await port.loadModule("echo")) as {
+        clientStreamConsumedCompletely(stream: AsyncIterator<Uint8Array>): Promise<Uint8Array>
+      }
+
+      async function* it() {
+        yield new Uint8Array([1])
+        yield new Uint8Array([2])
+        yield new Uint8Array([3])
+        yield new Uint8Array([4])
+        yield new Uint8Array([5])
+      }
+
+      const ret = await module.clientStreamConsumedCompletely(it())
+      expect(ret).toEqual(new Uint8Array([1, 2, 3, 4, 5]))
+    })
+
+    it("client is consumed asynchronously completely", async () => {
+      const { rpcClient } = await testEnv.start()
+      const port = await rpcClient.createPort("test1")
+      const module = (await port.loadModule("echo")) as {
+        consumeCompleteStreamAsynchronously(stream: AsyncIterator<Uint8Array>): Promise<Uint8Array>
+      }
+
+      const didFinish = future<boolean>()
+
+      async function* it() {
+        yield new Uint8Array([1])
+        yield new Uint8Array([2])
+        yield new Uint8Array([3])
+        yield new Uint8Array([4])
+        yield new Uint8Array([5])
+        didFinish.resolve(true)
+      }
+
+      const ret = await module.consumeCompleteStreamAsynchronously(it())
+      expect(ret).toEqual(new Uint8Array([]))
+      expect(await didFinish).toEqual(true)
+    })
+
+    it("client stream is closed by server", async () => {
+      const { rpcClient } = await testEnv.start()
+      const port = await rpcClient.createPort("test1")
+      const module = (await port.loadModule("echo")) as {
+        consume100FromClientStream(stream: AsyncIterator<Uint8Array>): Promise<Uint8Array>
+      }
+
+      const didFinish = future<boolean>()
+
+      async function* it() {
+        let i = 0
+        try {
+          while (true) {
+            yield new Uint8Array([i++ % 256])
+          }
+        } finally {
+          didFinish.resolve(true)
+        }
+      }
+
+      expect(await module.consume100FromClientStream(it())).toEqual(Uint8Array.from([100]))
+      expect(await didFinish).toEqual(true)
+    })
+
+    it("client is consumed and server generates one result for each client element", async () => {
+      const { rpcClient } = await testEnv.start()
+      const port = await rpcClient.createPort("test1")
+      const module = (await port.loadModule("echo")) as {
+        synchronousBidirectionalStream(stream: AsyncIterator<Uint8Array>): Promise<AsyncGenerator<Uint8Array>>
+      }
+
+      const didFinish = future<boolean>()
+
+      async function* it() {
+        let i = 0
+        try {
+          while (true) {
+            yield new Uint8Array([i++ % 256])
+          }
+        } finally {
+          didFinish.resolve(true)
+        }
+      }
+
+      const results = await takeAsync(await module.synchronousBidirectionalStream(it()), 100)
+
+      expect(results).toHaveLength(100)
+
+      let i = 0
+
+      for (const $ of results) {
+        i++
+        expect($).toEqual(Uint8Array.from([i, i * 2]))
+      }
+
+      expect(await didFinish).toEqual(true)
+    })
+  })
 })
+
+async function consumeInto<T>(stream: AsyncIterable<T>, into: T[]) {
+  for await (const thing of stream) {
+    into.push(thing)
+  }
+}

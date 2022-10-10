@@ -107,7 +107,7 @@ proto.addMessage(
   [
     PORT_ID,
     field("fixed32", "procedure_id", 4), // id of the procedure to be called
-    field("bool", "client_stream", 5),
+    field("fixed32", "client_stream", 5),
     PAYLOAD, // payload of the request (this protocol doesn't care about the content)
   ],
   ["RpcMessageHeader"]
