@@ -2,12 +2,11 @@ import { RpcClient, sendServerStream } from "../src"
 import { calculateMessageIdentifier } from "../src/protocol/helpers"
 import { RpcMessageHeader, RpcMessageTypes, StreamMessage } from "../src/protocol"
 import { createSimpleTestEnvironment, delay } from "./helpers"
-import { AckDispatcher, createAckHelper } from "../src/ack-helper"
 import future from "fp-future"
 import { MemoryTransport } from "../src/transports/Memory"
 import { log } from "./logger"
 import { AsyncQueue } from "../src/push-channel"
-import { GlobalHandlerFunction, MessageDispatcher } from "../src/message-number-handler"
+import { GlobalHandlerFunction, MessageDispatcher, messageDispatcher } from "../src/message-dispatcher"
 import { Reader } from "protobufjs"
 
 async function testPort(rpcClient: RpcClient, portName: string) {
@@ -139,15 +138,6 @@ test("Unit: server sendStream finalizes iterator upon failed ACK", async () => {
  * This test ensures that the server sends a close message after the iterator returns a value
  */
 test("Unit: server sendStream sends a close message after iterator finalizes", async () => {
-  const ackDispatcher: AckDispatcher = {
-    receiveAck() { },
-    async sendStreamMessage(data) {
-      if (data.sequenceId != 0) throw new Error('never called')
-      return Promise.resolve({ closed: false, ack: true } as any)
-    }
-  }
-
-
   const dispatcher: MessageDispatcher = {
     async sendStreamMessage(data) {
       if (data.sequenceId != 0) throw new Error('never called')
@@ -198,7 +188,7 @@ test("Unit: server sendStream sends a close message after iterator finalizes", a
  */
 test("Unit: AckDispatcher rejects all pending operations on transport error", async () => {
   const transport = MemoryTransport()
-  const ackDispatcher: AckDispatcher = createAckHelper(transport.server)
+  const ackDispatcher: MessageDispatcher = messageDispatcher(transport.server)
 
   const promises = Promise.allSettled([
     ackDispatcher.sendStreamMessage({ messageIdentifier: calculateMessageIdentifier(0, 1), sequenceId: 1, payload: '' } as any, true),
@@ -223,7 +213,7 @@ test("Unit: AckDispatcher rejects all pending operations on transport error", as
  */
 test("Unit: AckDispatcher rejects all pending operations on transport close", async () => {
   const transport = MemoryTransport()
-  const ackDispatcher: AckDispatcher = createAckHelper(transport.server)
+  const ackDispatcher: MessageDispatcher = messageDispatcher(transport.server)
 
   const promises = Promise.all([
     ackDispatcher.sendStreamMessage({ messageIdentifier: calculateMessageIdentifier(0, 1), sequenceId: 1, payload: '' } as any, true),

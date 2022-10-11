@@ -128,7 +128,9 @@ describe("codegen client & server", () => {
       },
       multipleBy2(req: AsyncIterable<IntValue>) {
         const generator = async function*() {
+          debugger
           for await (const value of req) {
+            debugger
             yield { int: value.int * 2 } as IntValue
           }
         }
@@ -362,7 +364,7 @@ describe("codegen client & server", () => {
     expect(result).toEqual({ int: 15 })
   })
 
-  it("AlmostEmpty stream response", async () => {
+  it("Consume all values from clientStream", async () => {
     const numberGenerator = async function*() {
       yield IntValue.fromJSON({ int: 1 })
       yield IntValue.fromJSON({ int: 2 })

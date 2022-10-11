@@ -1,5 +1,4 @@
-import { AckDispatcher } from "./ack-helper"
-import { MessageDispatcher } from "./message-number-handler"
+import { MessageDispatcher } from "./message-dispatcher"
 import { RpcMessageTypes, StreamMessage } from "./protocol"
 import { calculateMessageIdentifier, closeStreamMessage } from "./protocol/helpers"
 import { Transport } from "./types"

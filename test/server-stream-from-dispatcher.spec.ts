@@ -1,5 +1,5 @@
 import { streamFromDispatcher } from "../src/client"
-import { messageNumberHandler } from "../src/message-number-handler"
+import { messageDispatcher } from "../src/message-dispatcher"
 import { closeStreamMessage, streamMessage } from "../src/protocol/helpers"
 import { MemoryTransport } from "../src/transports/Memory"
 import { instrumentMemoryTransports, takeAsync } from "./helpers"
@@ -11,21 +11,17 @@ describe("serverStreamFromDispatcher", () => {
     const MESSAGE_NUMBER = 1
     const PORT_ID = 0
     const transport = instrumentMemoryTransports(MemoryTransport())
-    const dispatcher = messageNumberHandler(transport.client)
+    const dispatcher = messageDispatcher(transport.client)
     const removeListenerSpy = jest.spyOn(dispatcher, "removeListener")
 
     // create a client stream for the server
-    const clientStream = streamFromDispatcher(
-      dispatcher,
-      PORT_ID,
-      MESSAGE_NUMBER
-    )
+    const clientStream = streamFromDispatcher(dispatcher, PORT_ID, MESSAGE_NUMBER)
 
     // server sends CLOSE message
     setImmediate(() => transport.server.sendMessage(closeStreamMessage(MESSAGE_NUMBER, seq++, PORT_ID)))
 
     // consume all stream
-    const allMessages = await takeAsync(clientStream)
+    const allMessages = await takeAsync(clientStream.generator)
 
     // yields empty array
     expect(allMessages).toEqual([])
@@ -40,16 +36,12 @@ describe("serverStreamFromDispatcher", () => {
     const PORT_ID = 0
     const PAYLOAD = Uint8Array.from([0xde, 0xad])
     const transport = instrumentMemoryTransports(MemoryTransport())
-    const dispatcher = messageNumberHandler(transport.client)
+    const dispatcher = messageDispatcher(transport.client)
     const removeListenerSpy = jest.spyOn(dispatcher, "removeListener")
     const addListenerSpy = jest.spyOn(dispatcher, "addListener")
 
     // create a client stream for the server
-    const clientStream = streamFromDispatcher(
-      dispatcher,
-      PORT_ID,
-      MESSAGE_NUMBER
-    )
+    const clientStream = streamFromDispatcher(dispatcher, PORT_ID, MESSAGE_NUMBER).generator
 
     // it should have registered the listener
     expect(addListenerSpy).toHaveBeenCalledWith(MESSAGE_NUMBER, expect.anything())
@@ -79,14 +71,10 @@ describe("serverStreamFromDispatcher", () => {
     const PORT_ID = 0
     const PAYLOAD = Uint8Array.from([0xde, 0xad])
     const transport = instrumentMemoryTransports(MemoryTransport())
-    const dispatcher = messageNumberHandler(transport.client)
+    const dispatcher = messageDispatcher(transport.client)
 
     // create a client stream for the server
-    const clientStream = streamFromDispatcher(
-      dispatcher,
-      PORT_ID,
-      MESSAGE_NUMBER
-    )
+    const clientStream = streamFromDispatcher(dispatcher, PORT_ID, MESSAGE_NUMBER).generator
 
     // server sends a message and then closes the stream
     setImmediate(() => {
@@ -103,12 +91,8 @@ describe("serverStreamFromDispatcher", () => {
     let seq = 0
     const MESSAGE_NUMBER = 4
     const transport = instrumentMemoryTransports(MemoryTransport())
-    const dispatcher = messageNumberHandler(transport.client)
-    const clientStream = streamFromDispatcher(
-      dispatcher,
-      0,
-      MESSAGE_NUMBER
-    )
+    const dispatcher = messageDispatcher(transport.client)
+    const clientStream = streamFromDispatcher(dispatcher, 0, MESSAGE_NUMBER).generator
 
     // send three messages and then close the stream
     transport.server.sendMessage(streamMessage(MESSAGE_NUMBER, seq++, 0, Uint8Array.from([2])))
@@ -126,15 +110,11 @@ describe("serverStreamFromDispatcher", () => {
     const MESSAGE_NUMBER = 4
     const PORT_ID = 0
     const transport = instrumentMemoryTransports(MemoryTransport())
-    const dispatcher = messageNumberHandler(transport.client)
+    const dispatcher = messageDispatcher(transport.client)
     const removeListenerSpy = jest.spyOn(dispatcher, "removeListener")
 
     // create a client stream for the server
-    const clientStream = streamFromDispatcher(
-      dispatcher,
-      PORT_ID,
-      MESSAGE_NUMBER
-    )
+    const clientStream = streamFromDispatcher(dispatcher, PORT_ID, MESSAGE_NUMBER).generator
 
     // send three messags to the client
     transport.server.sendMessage(streamMessage(MESSAGE_NUMBER, seq++, PORT_ID, Uint8Array.from([2])))
@@ -160,14 +140,10 @@ describe("serverStreamFromDispatcher", () => {
     const MESSAGE_NUMBER = 4
     const PORT_ID = 0
     const transport = instrumentMemoryTransports(MemoryTransport())
-    const dispatcher = messageNumberHandler(transport.client)
+    const dispatcher = messageDispatcher(transport.client)
     const removeListenerSpy = jest.spyOn(dispatcher, "removeListener")
     // create a client stream for the server
-    const clientStream = streamFromDispatcher(
-      dispatcher,
-      PORT_ID,
-      MESSAGE_NUMBER
-    )
+    const clientStream = streamFromDispatcher(dispatcher, PORT_ID, MESSAGE_NUMBER).generator
 
     // send a message to the client
     transport.server.sendMessage(streamMessage(MESSAGE_NUMBER, seq++, PORT_ID, Uint8Array.from([12])))

@@ -1,5 +1,5 @@
 import { Writer, Reader } from "protobufjs/minimal"
-import { MessageDispatcher } from "./message-number-handler"
+import { MessageDispatcher } from "./message-dispatcher"
 let globalMessageNumber = 0
 
 export type ClientRequestDispatcher = {

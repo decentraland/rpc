@@ -270,7 +270,7 @@ export type RpcServerModule<Service extends TsProtoServiceDefinition, CallContex
   CallContext
 >
 
-export function loadService<CallContext = {}, Service extends TsProtoServiceDefinition = any>(
+export function loadService<CallContext extends {} = {}, Service extends TsProtoServiceDefinition = any>(
   port: RpcClientPort,
   service: Service
 ): RpcClientModule<Service, CallContext> {

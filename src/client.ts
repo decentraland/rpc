@@ -15,7 +15,7 @@ import {
   RpcMessageTypes,
   StreamMessage,
 } from "./protocol"
-import { MessageDispatcher, messageNumberHandler } from "./message-number-handler"
+import { MessageDispatcher, messageDispatcher } from "./message-dispatcher"
 import { AsyncQueue } from "./push-channel"
 import {
   calculateMessageIdentifier,
@@ -122,9 +122,10 @@ export function streamFromDispatcher(
   dispatcher: MessageDispatcher,
   portId: number,
   messageNumber: number
-): AsyncGenerator<Uint8Array> {
+): { generator: AsyncGenerator<Uint8Array>; closeIfNotOpened(): void } {
   let lastReceivedSequenceId = 0
   let isRemoteClosed = false
+  let wasOpen = false
 
   const channel = new AsyncQueue<Uint8Array>(sendServerSignals)
 
@@ -147,6 +148,8 @@ export function streamFromDispatcher(
       if (action == "close") {
         dispatcher.transport.sendMessage(closeStreamMessage(messageNumber, lastReceivedSequenceId, portId))
       } else if (action == "next") {
+        // mark the stream as opened
+        wasOpen = true
         // if (streamMessage.requireAck) {
         dispatcher.transport.sendMessage(streamAckMessage(messageNumber, lastReceivedSequenceId, portId))
         // }
@@ -172,10 +175,7 @@ export function streamFromDispatcher(
   }
 
   dispatcher.addListener(messageNumber, (reader, messageType, messageNumber, message) => {
-    if (messageType == RpcMessageTypes.RpcMessageTypes_STREAM_ACK) {
-      // Note: This is just for close the stream
-      processMessage(message)
-    } else if (messageType == RpcMessageTypes.RpcMessageTypes_STREAM_MESSAGE) {
+    if (messageType == RpcMessageTypes.RpcMessageTypes_STREAM_MESSAGE) {
       processMessage(message)
     } else if (messageType == RpcMessageTypes.RpcMessageTypes_REMOTE_ERROR_RESPONSE) {
       isRemoteClosed = true
@@ -185,27 +185,23 @@ export function streamFromDispatcher(
     }
   })
 
-  return channel
-}
-
-// @internal
-function waitForResponse(messageNumber: number, dispatcher: MessageDispatcher) {
-  return new Promise<Uint8Array>(function (resolve) {
-    dispatcher.addListener(messageNumber, (reader) => {
-      const ret = parseProtocolMessage(reader)
-
-      if (ret) {
-        const [messageType, message] = ret
-        if (messageType == RpcMessageTypes.RpcMessageTypes_RESPONSE) {
-          // console.log('client:RESPONSE!!')
-          resolve(message.payload)
-        }
+  return {
+    generator: channel,
+    closeIfNotOpened() {
+      if (!wasOpen) {
+        debugger
+        channel.close()
       }
-    })
-  })
+    },
+  }
 }
 
-// @internal
+/**
+ * This function is called client side, to generate an adapter for the protocol.
+ * The client must accept an U8 or AsyncIterable<U8> as parameter.
+ * And must return whatever the server decides, either it be an U8 or AsyncIterable<U8>
+ * @internal
+ */
 function createProcedure(
   portId: number,
   procedureId: number,
@@ -234,9 +230,15 @@ function createProcedure(
             if (ret.closed) return
             if (!ret.ack) throw new Error("Error in logic, ACK must be true")
 
-            sendStreamThroughTransport(requestDispatcher.dispatcher, requestDispatcher.dispatcher.transport, data as any, portId, messageNumber).catch(error => {
+            sendStreamThroughTransport(
+              requestDispatcher.dispatcher,
+              requestDispatcher.dispatcher.transport,
+              data as any,
+              portId,
+              messageNumber
+            ).catch((error) => {
               debugger
-              requestDispatcher.dispatcher.transport.emit('error', error)
+              requestDispatcher.dispatcher.transport.emit("error", error)
             })
           }
         )
@@ -267,43 +269,12 @@ function createProcedure(
           return undefined
         }
       } else if (messageType == RpcMessageTypes.RpcMessageTypes_STREAM_MESSAGE) {
-        const openStreamMessage = message as StreamMessage
-
-        if (openStreamMessage.clientStream) {
-          const iterator = data as AsyncIterable<Uint8Array>
-          let sequenceId = 0
-
-          const callClientStream = async () => {
-            for await (const message of iterator) {
-              // TODO: Implement client-side ack
-              requestDispatcher.dispatcher.transport.sendMessage(
-                streamMessage(messageNumber, sequenceId, portId, message)
-              )
-              sequenceId += 1
-            }
-
-            // console.log('client: close stream!!')
-            requestDispatcher.dispatcher.transport.sendMessage(closeStreamMessage(messageNumber, sequenceId, portId))
-          }
-
-          if (openStreamMessage.serverStream) {
-            callClientStream().catch((e) => console.log("client:catch callClientStream: ", e)) // TODO: Cerrar todos los client/server streams
-          } else {
-            // TODO: Quitar el await
-            await callClientStream() // wait for the streams ends
-
-            const res = await waitForResponse(messageNumber, requestDispatcher.dispatcher)
-
-            return res
-          }
-        }
-
-        // if we reach here, is a server stream
-
         // If a OpenStream is received with an serverStream, then it means we have the POSSIBILITY
         // to consume a remote generator. Look into the streamFromDispatcher functions
         // for more information.
-        return streamFromDispatcher(requestDispatcher.dispatcher, openStreamMessage.portId, messageNumber)
+        const openStreamMessage = message as StreamMessage
+        const { generator } = streamFromDispatcher(requestDispatcher.dispatcher, openStreamMessage.portId, messageNumber)
+        return generator
       } else if (messageType == RpcMessageTypes.RpcMessageTypes_REMOTE_ERROR_RESPONSE) {
         throwIfRemoteError(message)
       }
@@ -317,7 +288,7 @@ function createProcedure(
 export async function createRpcClient(transport: Transport): Promise<RpcClient> {
   const clientPortByName = new Map<string, Promise<RpcClientPort>>()
 
-  const dispatcher = messageNumberHandler(transport)
+  const dispatcher = messageDispatcher(transport)
   const requestDispatcher = createClientRequestDispatcher(dispatcher)
 
   async function internalCreatePort(portName: string): Promise<RpcClientPort> {

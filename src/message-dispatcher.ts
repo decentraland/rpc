@@ -20,7 +20,7 @@ export type MessageDispatcher = {
 
 export type GlobalHandlerFunction = (messageType: number, parsedMessage: any, messageNumber: number) => void
 
-export function messageNumberHandler(transport: Transport): MessageDispatcher {
+export function messageDispatcher(transport: Transport): MessageDispatcher {
   // message_number -> future
   const oneTimeCallbacks = new Map<number, ReaderCallback>()
   const listeners = new Map<number, ReaderCallback>()

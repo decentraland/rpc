@@ -28,32 +28,7 @@ export function closeStreamMessage(messageNumber: number, sequenceId: number, po
       payload: EMPTY_U8A,
       requireAck: false,
       clientStream: false,
-      serverStream: false
-    },
-    bb
-  )
-  return bb.finish()
-}
-
-export function openStreamMessage(
-  portId: number,
-  messageNumber: number,
-  clientStream: boolean,
-  serverStream: boolean,
-  useAck: boolean
-): Uint8Array {
-  bb.reset()
-  StreamMessage.encode(
-    {
-      messageIdentifier: calculateMessageIdentifier(RpcMessageTypes.RpcMessageTypes_STREAM_MESSAGE, messageNumber),
-      sequenceId: 0,
-      portId,
-      ack: false,
-      closed: false,
-      payload: EMPTY_U8A,
-      requireAck: useAck,
-      clientStream,
-      serverStream
+      serverStream: false,
     },
     bb
   )
@@ -77,7 +52,7 @@ export function streamMessage(
       payload,
       requireAck: true,
       serverStream: false,
-      clientStream: false
+      clientStream: false,
     },
     bb
   )
@@ -96,7 +71,7 @@ export function streamAckMessage(messageNumber: number, sequenceId: number, port
       payload: EMPTY_U8A,
       requireAck: true,
       serverStream: false,
-      clientStream: false
+      clientStream: false,
     },
     bb
   )
@@ -129,7 +104,7 @@ export function parseProtocolMessage(reader: Reader): [number, any, number] | nu
       return [messageType, StreamMessage.decode(reader), messageNumber]
     case RpcMessageTypes.RpcMessageTypes_SERVER_READY:
       return [messageType, null, messageNumber]
-      //return null
+    //return null
     case RpcMessageTypes.RpcMessageTypes_REMOTE_ERROR_RESPONSE:
       return [messageType, RemoteError.decode(reader), messageNumber]
     case RpcMessageTypes.RpcMessageTypes_REQUEST:
