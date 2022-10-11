@@ -76,7 +76,7 @@ describe("Server stream Helpers simple req/res", () => {
       },
       async consumeCompleteStreamAsynchronously(stream) {
         if (stream instanceof Uint8Array) throw new Error('argument is not stream')
-        const arr: Uint8Array[] = []
+        const arr: Uint8Array[] = [new Uint8Array([0])]
         void consumeInto(stream, arr)
         return Uint8Array.from(Buffer.concat(arr))
       },
@@ -249,7 +249,7 @@ describe("Server stream Helpers simple req/res", () => {
       }
 
       const ret = await module.consumeCompleteStreamAsynchronously(it())
-      expect(ret).toEqual(new Uint8Array([]))
+      expect(ret).toEqual(new Uint8Array([0]))
       expect(await didFinish).toEqual(true)
     })
 
