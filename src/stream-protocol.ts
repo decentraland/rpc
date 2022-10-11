@@ -1,6 +1,7 @@
 import { MessageDispatcher } from "./message-dispatcher"
-import { RpcMessageTypes, StreamMessage } from "./protocol"
-import { calculateMessageIdentifier, closeStreamMessage } from "./protocol/helpers"
+import { RemoteError, RpcMessageTypes, StreamMessage } from "./protocol"
+import { calculateMessageIdentifier, closeStreamMessage, streamAckMessage } from "./protocol/helpers"
+import { AsyncQueue } from "./push-channel"
 import { Transport } from "./types"
 
 export async function sendStreamThroughTransport(
@@ -43,4 +44,102 @@ export async function sendStreamThroughTransport(
   }
 
   transport.sendMessage(closeStreamMessage(messageNumber, sequenceNumber, portId))
+}
+
+
+/**
+ * If a StreamMessage is received, then it means we have the POSSIBILITY to
+ * consume a remote generator. The client must answer every ACK with the next
+ * inteded action, could be: next(), close(). Both actions are serialized in the
+ * StreamMessage. The server MUST NOT generate any new element of the generator
+ * if the client doesn't ask for it.
+ *
+ * The whole protocol is designed to be SLOW AND SECURE, that means, ACKs (slow)
+ * will block the generation and consumption of iterators (secure).
+ *
+ * That exist to save the memory of the servers and to generate the much needed
+ * backpressure.
+ *
+ * If throughput is what you are looking for, you may better use bigger messages
+ * containing serialized lists. Effectively reducing the number of messages
+ * and increasing their size.
+ *
+ * @internal
+ */
+ export function streamFromDispatcher(
+  dispatcher: MessageDispatcher,
+  portId: number,
+  messageNumber: number
+): { generator: AsyncGenerator<Uint8Array>; closeIfNotOpened(): void } {
+  let lastReceivedSequenceId = 0
+  let isRemoteClosed = false
+  let wasOpen = false
+
+  const channel = new AsyncQueue<Uint8Array>(sendServerSignals)
+
+  dispatcher.transport.on("close", () => {
+    channel.close(new Error("RPC Transport closed"))
+  })
+
+  dispatcher.transport.on("error", () => {
+    channel.close(new Error("RPC Transport failed"))
+  })
+
+  // This function is called at two moments
+  // 1. When the channel is closed or fails -> an ACK closing the stream is sent to the server
+  // 2. When the channel.next() is called   -> an ACK requesting the next elem is sent to the server
+  function sendServerSignals(_channel: AsyncQueue<Uint8Array>, action: "close" | "next") {
+    if (action == "close") {
+      dispatcher.removeListener(messageNumber)
+    }
+    if (!isRemoteClosed) {
+      if (action == "close") {
+        dispatcher.transport.sendMessage(closeStreamMessage(messageNumber, lastReceivedSequenceId, portId))
+      } else if (action == "next") {
+        // mark the stream as opened
+        wasOpen = true
+        // if (streamMessage.requireAck) {
+        dispatcher.transport.sendMessage(streamAckMessage(messageNumber, lastReceivedSequenceId, portId))
+        // }
+      }
+    }
+  }
+
+  // receive a message from the server and send it to the iterable channel
+  function processMessage(message: StreamMessage) {
+    lastReceivedSequenceId = message.sequenceId
+
+    if (message.closed) {
+      // when the server CLOSES the stream, then we raise the flag isRemoteClosed
+      // to prevent sending an extra closeStreamMessage to the server after closing
+      // our channel.
+      // IMPORTANT: If the server closes the connection, then we DONT send the ACK
+      //            back to the server because it is redundant information.
+      isRemoteClosed = true
+      channel.close()
+    } else {
+      channel.enqueue(message.payload)
+    }
+  }
+
+  dispatcher.addListener(messageNumber, (reader, messageType, messageNumber, message) => {
+    if (messageType == RpcMessageTypes.RpcMessageTypes_STREAM_MESSAGE) {
+      processMessage(message)
+    } else if (messageType == RpcMessageTypes.RpcMessageTypes_REMOTE_ERROR_RESPONSE) {
+      isRemoteClosed = true
+      channel.close(new Error("RemoteError: " + ((message as RemoteError).errorMessage || "Unknown remote error")))
+    } else {
+      channel.close(new Error("RemoteError: Protocol error, unkown message"))
+    }
+  })
+
+  return {
+    generator: channel,
+    closeIfNotOpened() {
+      if (!wasOpen) {
+        debugger
+        channel.close()
+      }
+    },
+  }
 }

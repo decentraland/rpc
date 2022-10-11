@@ -32,7 +32,7 @@ test("Unit: server sendStream doesn't consume an element from the generator unle
     addListener: function (messageNumber: number, handler: (reader: Reader, messageType: number, messageNumber: number, message: any) => void): void {
       throw new Error("Function not implemented.")
     },
-    addOneTimeListener: function (messageNumber: number, handler: (reader: Reader, messageType: number, messageNumber: number, message: any) => void): void {
+    async addOneTimeListener(){
       throw new Error("Function not implemented.")
     },
     removeListener: function (messageNumber: number): void {
@@ -85,7 +85,7 @@ test("Unit: server sendStream finalizes iterator upon failed ACK", async () => {
     addListener: function (messageNumber: number, handler: (reader: Reader, messageType: number, messageNumber: number, message: any) => void): void {
       throw new Error("Function not implemented.")
     },
-    addOneTimeListener: function (messageNumber: number, handler: (reader: Reader, messageType: number, messageNumber: number, message: any) => void): void {
+    async addOneTimeListener(){
       throw new Error("Function not implemented.")
     },
     removeListener: function (messageNumber: number): void {
@@ -147,7 +147,7 @@ test("Unit: server sendStream sends a close message after iterator finalizes", a
     addListener: function (messageNumber: number, handler: (reader: Reader, messageType: number, messageNumber: number, message: any) => void): void {
       throw new Error("Function not implemented.")
     },
-    addOneTimeListener: function (messageNumber: number, handler: (reader: Reader, messageType: number, messageNumber: number, message: any) => void): void {
+    async addOneTimeListener(){
       throw new Error("Function not implemented.")
     },
     removeListener: function (messageNumber: number): void {

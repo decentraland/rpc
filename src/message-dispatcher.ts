@@ -8,12 +8,13 @@ export type SendableMessage = {
   messageIdentifier: number
 }
 type ReaderCallback = (reader: Reader, messageType: number, messageNumber: number, message: any) => void
+type OneTimeListener = { reader: Reader; messageType: number; messageNumber: number; message: any }
 
 export type MessageDispatcher = {
   transport: Transport
   sendStreamMessage(data: StreamMessage, useAck: boolean): Promise<SubsetMessage>
   addListener(messageNumber: number, handler: ReaderCallback): void
-  addOneTimeListener(messageNumber: number, handler: ReaderCallback): void
+  addOneTimeListener(messageNumber: number): Promise<OneTimeListener>
   removeListener(messageNumber: number): void
   setGlobalHandler(globalHandler: GlobalHandlerFunction): void
 }
@@ -22,7 +23,7 @@ export type GlobalHandlerFunction = (messageType: number, parsedMessage: any, me
 
 export function messageDispatcher(transport: Transport): MessageDispatcher {
   // message_number -> future
-  const oneTimeCallbacks = new Map<number, ReaderCallback>()
+  const oneTimeCallbacks = new Map<number, [(value: OneTimeListener) => void, (err: Error) => void]>()
   const listeners = new Map<number, ReaderCallback>()
 
   let globalHandlerFunction: GlobalHandlerFunction | undefined
@@ -40,8 +41,9 @@ export function messageDispatcher(transport: Transport): MessageDispatcher {
           const fut = oneTimeCallbacks.get(messageNumber)
           try {
             if (fut) {
+              const [resolve] = fut
               reader.pos = 0
-              fut(reader, messageType, messageNumber, message)
+              resolve({ reader, messageType, messageNumber, message })
               oneTimeCallbacks.delete(messageNumber)
             }
             const handler = listeners.get(messageNumber)
@@ -73,12 +75,14 @@ export function messageDispatcher(transport: Transport): MessageDispatcher {
 
   function closeAll() {
     ackCallbacks.forEach(([resolve]) => resolve({ closed: true, ack: false }))
+    oneTimeCallbacks.forEach(([, reject]) => reject(new Error('')))
     ackCallbacks.clear()
   }
 
   transport.on("close", closeAll)
   transport.on("error", (err) => {
     ackCallbacks.forEach(([, reject]) => reject(err))
+    oneTimeCallbacks.forEach(([, reject]) => reject(err))
     ackCallbacks.clear()
   })
 
@@ -88,8 +92,8 @@ export function messageDispatcher(transport: Transport): MessageDispatcher {
     if (fut) {
       ackCallbacks.delete(key)
       fut[0](data)
-    // } else {
-    //   throw new Error("Received an ACK message for an inexistent handler " + key)
+      // } else {
+      //   throw new Error("Received an ACK message for an inexistent handler " + key)
     }
   }
 
@@ -98,8 +102,10 @@ export function messageDispatcher(transport: Transport): MessageDispatcher {
     setGlobalHandler(handler: GlobalHandlerFunction) {
       globalHandlerFunction = handler
     },
-    addOneTimeListener(messageId: number, handler: ReaderCallback) {
-      oneTimeCallbacks.set(messageId, handler)
+    addOneTimeListener(messageId: number) {
+      return new Promise<OneTimeListener>((res, rej) => {
+        oneTimeCallbacks.set(messageId, [res, rej])
+      })
     },
     addListener(messageId: number, handler) {
       if (listeners.has(messageId)) throw new Error("There is already a handler for messageId " + messageId)

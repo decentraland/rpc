@@ -20,12 +20,11 @@ export function createClientRequestDispatcher(dispatcher: MessageDispatcher): Cl
     dispatcher,
     async request(cb: (bb: Writer, messageNumber: number) => void): Promise<Reader> {
       const messageNumber = nextMessageNumber()
-      return new Promise<Reader>((resolve) => {
-        dispatcher.addOneTimeListener(messageNumber, resolve)
-        const bb = new Writer()
-        cb(bb, messageNumber)
-        dispatcher.transport.sendMessage(bb.finish())
-      })
+      const bb = new Writer()
+      cb(bb, messageNumber)
+      dispatcher.transport.sendMessage(bb.finish())
+      const { reader } = await dispatcher.addOneTimeListener(messageNumber)
+      return reader
     },
     nextMessageNumber,
   }

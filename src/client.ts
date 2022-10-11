@@ -1,7 +1,6 @@
 import { CallableProcedureClient, ClientModuleDefinition, RpcClient, RpcClientPort, RpcPortEvents } from "."
 import { Transport } from "./types"
 import mitt from "mitt"
-import future, { IFuture } from "fp-future"
 import { Writer } from "protobufjs/minimal"
 import {
   CreatePort,
@@ -15,17 +14,10 @@ import {
   RpcMessageTypes,
   StreamMessage,
 } from "./protocol"
-import { MessageDispatcher, messageDispatcher } from "./message-dispatcher"
-import { AsyncQueue } from "./push-channel"
-import {
-  calculateMessageIdentifier,
-  closeStreamMessage,
-  parseProtocolMessage,
-  streamAckMessage,
-  streamMessage,
-} from "./protocol/helpers"
+import { messageDispatcher } from "./message-dispatcher"
+import { calculateMessageIdentifier, parseProtocolMessage } from "./protocol/helpers"
 import { ClientRequestDispatcher, createClientRequestDispatcher } from "./client-request-dispatcher"
-import { sendStreamThroughTransport } from "./stream-protocol"
+import { sendStreamThroughTransport, streamFromDispatcher } from "./stream-protocol"
 
 const EMPTY_U8 = new Uint8Array(0)
 
@@ -100,103 +92,6 @@ function throwIfRemoteError(parsedMessage: RemoteError) {
 }
 
 /**
- * If a StreamMessage is received, then it means we have the POSSIBILITY to
- * consume a remote generator. The client must answer every ACK with the next
- * inteded action, could be: next(), close(). Both actions are serialized in the
- * StreamMessage. The server MUST NOT generate any new element of the generator
- * if the client doesn't ask for it.
- *
- * The whole protocol is designed to be SLOW AND SECURE, that means, ACKs (slow)
- * will block the generation and consumption of iterators (secure).
- *
- * That exist to save the memory of the servers and to generate the much needed
- * backpressure.
- *
- * If throughput is what you are looking for, you may better use bigger messages
- * containing serialized lists. Effectively reducing the number of messages
- * and increasing their size.
- *
- * @internal
- */
-export function streamFromDispatcher(
-  dispatcher: MessageDispatcher,
-  portId: number,
-  messageNumber: number
-): { generator: AsyncGenerator<Uint8Array>; closeIfNotOpened(): void } {
-  let lastReceivedSequenceId = 0
-  let isRemoteClosed = false
-  let wasOpen = false
-
-  const channel = new AsyncQueue<Uint8Array>(sendServerSignals)
-
-  dispatcher.transport.on("close", () => {
-    channel.close(new Error("RPC Transport closed"))
-  })
-
-  dispatcher.transport.on("error", () => {
-    channel.close(new Error("RPC Transport failed"))
-  })
-
-  // This function is called at two moments
-  // 1. When the channel is closed or fails -> an ACK closing the stream is sent to the server
-  // 2. When the channel.next() is called   -> an ACK requesting the next elem is sent to the server
-  function sendServerSignals(_channel: AsyncQueue<Uint8Array>, action: "close" | "next") {
-    if (action == "close") {
-      dispatcher.removeListener(messageNumber)
-    }
-    if (!isRemoteClosed) {
-      if (action == "close") {
-        dispatcher.transport.sendMessage(closeStreamMessage(messageNumber, lastReceivedSequenceId, portId))
-      } else if (action == "next") {
-        // mark the stream as opened
-        wasOpen = true
-        // if (streamMessage.requireAck) {
-        dispatcher.transport.sendMessage(streamAckMessage(messageNumber, lastReceivedSequenceId, portId))
-        // }
-      }
-    }
-  }
-
-  // receive a message from the server and send it to the iterable channel
-  function processMessage(message: StreamMessage) {
-    lastReceivedSequenceId = message.sequenceId
-
-    if (message.closed) {
-      // when the server CLOSES the stream, then we raise the flag isRemoteClosed
-      // to prevent sending an extra closeStreamMessage to the server after closing
-      // our channel.
-      // IMPORTANT: If the server closes the connection, then we DONT send the ACK
-      //            back to the server because it is redundant information.
-      isRemoteClosed = true
-      channel.close()
-    } else {
-      channel.enqueue(message.payload)
-    }
-  }
-
-  dispatcher.addListener(messageNumber, (reader, messageType, messageNumber, message) => {
-    if (messageType == RpcMessageTypes.RpcMessageTypes_STREAM_MESSAGE) {
-      processMessage(message)
-    } else if (messageType == RpcMessageTypes.RpcMessageTypes_REMOTE_ERROR_RESPONSE) {
-      isRemoteClosed = true
-      channel.close(new Error("RemoteError: " + ((message as RemoteError).errorMessage || "Unknown remote error")))
-    } else {
-      channel.close(new Error("RemoteError: Protocol error"))
-    }
-  })
-
-  return {
-    generator: channel,
-    closeIfNotOpened() {
-      if (!wasOpen) {
-        debugger
-        channel.close()
-      }
-    },
-  }
-}
-
-/**
  * This function is called client side, to generate an adapter for the protocol.
  * The client must accept an U8 or AsyncIterable<U8> as parameter.
  * And must return whatever the server decides, either it be an U8 or AsyncIterable<U8>
@@ -221,14 +116,17 @@ function createProcedure(
       if (Symbol.asyncIterator in data) {
         // if we are going to generate a client stream, it will be handled with a new
         // message ID
-        callProcedurePacket.clientStream = requestDispatcher.nextMessageNumber()
+        const messageNumber = requestDispatcher.nextMessageNumber()
+        callProcedurePacket.clientStream = messageNumber
         callProcedurePacket.payload = EMPTY_U8
 
-        requestDispatcher.dispatcher.addOneTimeListener(
-          callProcedurePacket.clientStream,
-          (reader, messageType, messageNumber, ret: StreamMessage) => {
-            if (ret.closed) return
-            if (!ret.ack) throw new Error("Error in logic, ACK must be true")
+        requestDispatcher.dispatcher
+          .addOneTimeListener(messageNumber)
+          .then(($) => {
+            const message = $.message as StreamMessage
+
+            if (message.closed) return
+            if (!message.ack) throw new Error("Error in logic, ACK must be true")
 
             sendStreamThroughTransport(
               requestDispatcher.dispatcher,
@@ -236,12 +134,12 @@ function createProcedure(
               data as any,
               portId,
               messageNumber
-            ).catch((error) => {
-              debugger
-              requestDispatcher.dispatcher.transport.emit("error", error)
-            })
-          }
-        )
+            )
+          })
+          .catch((error) => {
+            debugger
+            requestDispatcher.dispatcher.transport.emit("error", error)
+          })
       } else {
         callProcedurePacket.payload = data as Uint8Array
       }
@@ -273,7 +171,11 @@ function createProcedure(
         // to consume a remote generator. Look into the streamFromDispatcher functions
         // for more information.
         const openStreamMessage = message as StreamMessage
-        const { generator } = streamFromDispatcher(requestDispatcher.dispatcher, openStreamMessage.portId, messageNumber)
+        const { generator } = streamFromDispatcher(
+          requestDispatcher.dispatcher,
+          openStreamMessage.portId,
+          messageNumber
+        )
         return generator
       } else if (messageType == RpcMessageTypes.RpcMessageTypes_REMOTE_ERROR_RESPONSE) {
         throwIfRemoteError(message)

@@ -1,9 +1,8 @@
-import { streamFromDispatcher } from "../src/client"
 import { messageDispatcher } from "../src/message-dispatcher"
 import { closeStreamMessage, streamMessage } from "../src/protocol/helpers"
+import { streamFromDispatcher } from "../src/stream-protocol"
 import { MemoryTransport } from "../src/transports/Memory"
 import { instrumentMemoryTransports, takeAsync } from "./helpers"
-import { StreamMessage } from "../src/protocol"
 
 describe("serverStreamFromDispatcher", () => {
   it("a CloseMessage from the server closes the iterator in the client.", async () => {

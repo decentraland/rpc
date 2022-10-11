@@ -10,7 +10,7 @@ import {
 } from "./types"
 import mitt from "mitt"
 import { Writer } from "protobufjs/minimal"
-import { AsyncProcedureResultServer, RpcPortEvents, ServerModuleDeclaration, streamFromDispatcher } from "."
+import { AsyncProcedureResultServer, RpcPortEvents, ServerModuleDeclaration } from "."
 import { calculateMessageIdentifier } from "./protocol/helpers"
 import {
   CreatePort,
@@ -27,7 +27,7 @@ import {
 } from "./protocol"
 import { ILoggerComponent } from "@well-known-components/interfaces"
 import { MessageDispatcher, messageDispatcher } from "./message-dispatcher"
-import { sendStreamThroughTransport } from "./stream-protocol"
+import { sendStreamThroughTransport, streamFromDispatcher } from "./stream-protocol"
 
 let lastPortId = 0
 
