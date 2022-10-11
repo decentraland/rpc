@@ -35,6 +35,9 @@ async function testPort(rpcClient: RpcClient, portName: string) {
 describe("Server stream Helpers simple req/res", () => {
   let remoteCallCounter = 0
   let channel: ReturnType<typeof pushableChannel>
+
+  const asyncJobs: Promise<any>[] = []
+
   const testEnv = createSimpleTestEnvironment<void>(async function (port) {
     log(`! Initializing port ${port.portId} ${port.portName}`)
     port.registerModule("echo", async (port) => ({
@@ -69,27 +72,45 @@ describe("Server stream Helpers simple req/res", () => {
         }
       },
       async clientStreamConsumedCompletely(stream) {
-        if (stream instanceof Uint8Array) throw new Error('argument is not stream')
+        if (stream instanceof Uint8Array) throw new Error("argument is not stream")
         const arr: Uint8Array[] = []
         await consumeInto(stream, arr)
         return Uint8Array.from(Buffer.concat(arr))
       },
       async consumeCompleteStreamAsynchronously(stream) {
-        if (stream instanceof Uint8Array) throw new Error('argument is not stream')
+        if (stream instanceof Uint8Array) throw new Error("argument is not stream")
         const arr: Uint8Array[] = [new Uint8Array([0])]
         void consumeInto(stream, arr)
         return Uint8Array.from(Buffer.concat(arr))
       },
       async consume100FromClientStream(stream): Promise<Uint8Array> {
-        if (stream instanceof Uint8Array) throw new Error('argument is not stream')
+        if (stream instanceof Uint8Array) throw new Error("argument is not stream")
         const r = await takeAsync(stream, 100)
         return Uint8Array.from([r.length])
       },
       async *synchronousBidirectionalStream(stream) {
-        if (stream instanceof Uint8Array) throw new Error('argument is not stream')
+        if (stream instanceof Uint8Array) throw new Error("argument is not stream")
         for await (const $ of stream) {
           yield Uint8Array.from([$[0], $[0] * 2])
         }
+      },
+      async neverOpensClientStream(stream) {
+        if (stream instanceof Uint8Array) throw new Error("argument is not stream")
+        return Uint8Array.from([123])
+      },
+      async asyncJob(stream) {
+        if (stream instanceof Uint8Array) throw new Error("argument is not stream")
+
+        const number =
+          asyncJobs.push(
+            (async () => {
+              await delay(10)
+              await takeAsync(stream, 10)
+            })()
+          ) - 1
+
+        // returns the index of the async job to run assertions
+        return Uint8Array.from([number])
       },
     }))
   })
@@ -310,6 +331,59 @@ describe("Server stream Helpers simple req/res", () => {
 
       expect(await didFinish).toEqual(true)
     })
+
+    it("client stream is never opened by server", async () => {
+      const { rpcClient } = await testEnv.start()
+      const port = await rpcClient.createPort("test1")
+      const module = (await port.loadModule("echo")) as {
+        neverOpensClientStream(stream: AsyncIterator<Uint8Array>): Promise<Uint8Array>
+      }
+
+      let didHappen = false
+
+      async function* it() {
+        didHappen = true
+        throw new Error("this should never happen")
+      }
+
+      expect(await module.neverOpensClientStream(it())).toEqual(Uint8Array.from([123]))
+      expect(didHappen).toBeFalsy()
+    })
+
+    it("client stream cannot be consumed if server sent an asnwer", async () => {
+      const { rpcClient } = await testEnv.start()
+      const port = await rpcClient.createPort("test1")
+      const module = (await port.loadModule("echo")) as {
+        asyncJob(stream: AsyncIterator<Uint8Array>): Promise<Uint8Array>
+      }
+
+      // 1. call the server with an iterator that fails on its first iteration
+      // 2. the server will schedule an async job to consume the iterator and
+      //    it will return immediately after that
+      // 3. we get the response from the server
+      // 4. the async job will fail to consume the stream with a stream not
+      //    available error
+
+      let didHappen = false
+
+      async function* it() {
+        didHappen = true
+        throw new Error("this should never happen")
+      }
+
+      const result = await module.asyncJob(it())
+      const jobId = result[0]
+
+      await expect(asyncJobs[jobId]).rejects.toThrow('ClientStream lost')
+    })
+
+    // TODO: close transport in the middle of the server stream should throw an error
+    //       in the stream itearator
+
+    // TODO: close transport in the middle of the client stream should throw an error
+    //       in the stream itearator
+
+    // TODO: random-based bidirectional stream
   })
 })
 

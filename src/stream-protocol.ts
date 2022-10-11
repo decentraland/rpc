@@ -138,7 +138,7 @@ export async function sendStreamThroughTransport(
     closeIfNotOpened() {
       if (!wasOpen) {
         debugger
-        channel.close()
+        channel.close(new Error('ClientStream lost'))
       }
     },
   }
