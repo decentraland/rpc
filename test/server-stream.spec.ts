@@ -210,7 +210,7 @@ describe("Server stream Helpers simple req/res", () => {
     expect(remoteCallCounter).toEqual(localCallCounter)
   })
 
-  describe.only("clientStream", () => {
+  describe("clientStream", () => {
     it("client is consumed completely", async () => {
       const { rpcClient } = await testEnv.start()
       const port = await rpcClient.createPort("test1")

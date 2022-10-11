@@ -349,7 +349,7 @@ describe("codegen client & server", () => {
     expect(infiniteGeneratorClosed).toEqual(1)
   })
 
-  it.skip("Add all numbers in the client stream", async () => {
+  it("Add all numbers in the client stream", async () => {
     const numberGenerator = async function*() {
       yield IntValue.fromJSON({ int: 1 })
       yield IntValue.fromJSON({ int: 2 })
@@ -362,7 +362,7 @@ describe("codegen client & server", () => {
     expect(result).toEqual({ int: 15 })
   })
 
-  it.skip("AlmostEmpty stream response", async () => {
+  it("AlmostEmpty stream response", async () => {
     const numberGenerator = async function*() {
       yield IntValue.fromJSON({ int: 1 })
       yield IntValue.fromJSON({ int: 2 })
