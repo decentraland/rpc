@@ -304,8 +304,8 @@ describe("Server stream Helpers simple req/res", () => {
       let i = 0
 
       for (const $ of results) {
-        i++
         expect($).toEqual(Uint8Array.from([i, i * 2]))
+        i++
       }
 
       expect(await didFinish).toEqual(true)
