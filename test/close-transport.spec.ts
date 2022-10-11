@@ -7,6 +7,8 @@ import future from "fp-future"
 import { MemoryTransport } from "../src/transports/Memory"
 import { log } from "./logger"
 import { AsyncQueue } from "../src/push-channel"
+import { GlobalHandlerFunction, MessageDispatcher } from "../src/message-number-handler"
+import { Reader } from "protobufjs"
 
 async function testPort(rpcClient: RpcClient, portName: string) {
   const port = await rpcClient.createPort(portName)
@@ -23,16 +25,28 @@ async function testPort(rpcClient: RpcClient, portName: string) {
 test("Unit: server sendStream doesn't consume an element from the generator unless specifically asked", async () => {
   const messageQueue = new AsyncQueue<Partial<StreamMessage>>(log)
 
-  const ackDispatcher: AckDispatcher = {
-    receiveAck() { },
+  const dispatcher: MessageDispatcher = {
     async sendStreamMessage(data) {
       return await (await messageQueue.next()).value
+    },
+    transport: undefined,
+    addListener: function (messageNumber: number, handler: (reader: Reader, messageType: number, messageNumber: number, message: any) => void): void {
+      throw new Error("Function not implemented.")
+    },
+    addOneTimeListener: function (messageNumber: number, handler: (reader: Reader, messageType: number, messageNumber: number, message: any) => void): void {
+      throw new Error("Function not implemented.")
+    },
+    removeListener: function (messageNumber: number): void {
+      throw new Error("Function not implemented.")
+    },
+    setGlobalHandler: function (globalHandler: GlobalHandlerFunction): void {
+      throw new Error("Function not implemented.")
     }
   }
 
   const transport = MemoryTransport()
   const sendMessageSpy = jest.spyOn(transport.client, 'sendMessage')
-  const sendWithAckSpy = jest.spyOn(ackDispatcher, 'sendStreamMessage')
+  const sendWithAckSpy = jest.spyOn(dispatcher, 'sendStreamMessage')
 
   function generator() {
     const ret: AsyncGenerator<Uint8Array> = {
@@ -45,7 +59,7 @@ test("Unit: server sendStream doesn't consume an element from the generator unle
   }
 
   await Promise.all([
-    sendServerStream(ackDispatcher, transport.client, generator(), 0, 0).catch(log),
+    sendServerStream(dispatcher, transport.client, generator(), 0, 0).catch(log),
     // this message responds to the "stream offer" by closing it.
     // IN SOME CASES, the client may not need to consume the stream. Since we are
     // creating a "safe" API to handle resources and possibly signatures in the
@@ -64,16 +78,28 @@ test("Unit: server sendStream doesn't consume an element from the generator unle
 test("Unit: server sendStream finalizes iterator upon failed ACK", async () => {
   const messageQueue = new AsyncQueue<Partial<StreamMessage>>(log)
 
-  const ackDispatcher: AckDispatcher = {
-    receiveAck() { },
+  const dispatcher: MessageDispatcher = {
     async sendStreamMessage(data) {
       return await (await messageQueue.next()).value
+    },
+    transport: undefined,
+    addListener: function (messageNumber: number, handler: (reader: Reader, messageType: number, messageNumber: number, message: any) => void): void {
+      throw new Error("Function not implemented.")
+    },
+    addOneTimeListener: function (messageNumber: number, handler: (reader: Reader, messageType: number, messageNumber: number, message: any) => void): void {
+      throw new Error("Function not implemented.")
+    },
+    removeListener: function (messageNumber: number): void {
+      throw new Error("Function not implemented.")
+    },
+    setGlobalHandler: function (globalHandler: GlobalHandlerFunction): void {
+      throw new Error("Function not implemented.")
     }
   }
 
   const transport = MemoryTransport()
   const sendMessageSpy = jest.spyOn(transport.client, 'sendMessage')
-  const sendWithAckSpy = jest.spyOn(ackDispatcher, 'sendStreamMessage')
+  const sendWithAckSpy = jest.spyOn(dispatcher, 'sendStreamMessage')
 
   let finalized = false
 
@@ -93,7 +119,7 @@ test("Unit: server sendStream finalizes iterator upon failed ACK", async () => {
   }
 
   await Promise.all([
-    sendServerStream(ackDispatcher, transport.client, generator(), 0, 0).catch(log),
+    sendServerStream(dispatcher, transport.client, generator(), 0, 0).catch(log),
     // this message responds to the "stream offer"
     messageQueue.enqueue({ ack: true, closed: false }),
     // this message asks for an element of the stream to be consumed
@@ -121,6 +147,27 @@ test("Unit: server sendStream sends a close message after iterator finalizes", a
     }
   }
 
+
+  const dispatcher: MessageDispatcher = {
+    async sendStreamMessage(data) {
+      if (data.sequenceId != 0) throw new Error('never called')
+      return Promise.resolve({ closed: false, ack: true } as any)
+    },
+    transport: undefined,
+    addListener: function (messageNumber: number, handler: (reader: Reader, messageType: number, messageNumber: number, message: any) => void): void {
+      throw new Error("Function not implemented.")
+    },
+    addOneTimeListener: function (messageNumber: number, handler: (reader: Reader, messageType: number, messageNumber: number, message: any) => void): void {
+      throw new Error("Function not implemented.")
+    },
+    removeListener: function (messageNumber: number): void {
+      throw new Error("Function not implemented.")
+    },
+    setGlobalHandler: function (globalHandler: GlobalHandlerFunction): void {
+      throw new Error("Function not implemented.")
+    }
+  }
+
   const transport = MemoryTransport()
 
   const sendMessageSpy = jest.spyOn(transport.client, 'sendMessage')
@@ -139,7 +186,7 @@ test("Unit: server sendStream sends a close message after iterator finalizes", a
     return ret
   }
 
-  await sendServerStream(ackDispatcher, transport.client, generator(), 0, 0)
+  await sendServerStream(dispatcher, transport.client, generator(), 0, 0)
 
   expect(sendMessageSpy).toBeCalledTimes(1)
 })
