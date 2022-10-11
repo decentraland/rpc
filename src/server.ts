@@ -427,6 +427,7 @@ export function createRpcServer<Context = {}>(options: CreateRpcServerOptions<Co
       port.on("close", () => events.emit("portClosed", { port, transport }))
     } else if (messageType == RpcMessageTypes.RpcMessageTypes_DESTROY_PORT) {
       await handleDestroyPort(transport, parsedMessage, messageNumber, state)
+    } else if (messageType == RpcMessageTypes.RpcMessageTypes_STREAM_ACK || messageType == RpcMessageTypes.RpcMessageTypes_STREAM_MESSAGE) {
       // } else if (messageType == RpcMessageTypes.RpcMessageTypes_STREAM_ACK) {
       //   dispatcher.receiveAck(parsedMessage, messageNumber)
       // } else if (messageType == RpcMessageTypes.RpcMessageTypes_STREAM_MESSAGE) {
