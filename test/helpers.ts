@@ -39,7 +39,8 @@ export function instrumentTransport(transport: Transport, name: string) {
     })
     transport.on("message", (data) => {
       try {
-        const [messageType, messageNumber] = parseMessageIdentifier(serialize(data).messageIdentifier)
+        const message = serialize(data)
+        const [messageType, messageNumber] = message ? parseMessageIdentifier(serialize(data).messageIdentifier) : [0, 0]
         log(`  (message->${name}): ${messageType} ${messageNumber} ${JSON.stringify(serialize(data))}`)
       } catch (err) {
         console.error(err)
