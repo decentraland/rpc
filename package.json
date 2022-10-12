@@ -41,7 +41,6 @@
     "dist"
   ],
   "dependencies": {
-    "@well-known-components/interfaces": "^1.1.2",
     "mitt": "^3.0.0",
     "ts-proto": "^1.126.1"
   }
