@@ -30,6 +30,9 @@ import { sendStreamThroughTransport, streamFromDispatcher } from "./stream-proto
 
 let lastPortId = 0
 
+/**
+ * @public
+ */
 export type ILogger = {
   log(message: string, extra?: Record<string, string | number>): void;
   error(error: string | Error, extra?: Record<string, string | number>): void;
