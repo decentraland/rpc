@@ -37,7 +37,6 @@ async function* requestToBinaryGenerator<Request, Response>(requests: AsyncItera
     const arg = method.requestType.encode(request)
     yield arg.finish()
   }
-  // console.log('codegen: requestToBinaryGenerator done!')
 }
 
 export function clientProcedureClientStream<Request, Response>(

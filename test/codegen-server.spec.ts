@@ -11,7 +11,6 @@ import {
 import { createSimpleTestEnvironment, delay, takeAsync } from "./helpers"
 import * as codegen from "../src/codegen"
 import { from, lastValueFrom, take } from "rxjs"
-import { streamWithoutAck } from "../src"
 
 const FAIL_WITH_EXCEPTION_ISBN = 1
 
@@ -128,14 +127,12 @@ describe("codegen client & server", () => {
       },
       multipleBy2(req: AsyncIterable<IntValue>) {
         const generator = async function*() {
-          debugger
           for await (const value of req) {
-            debugger
             yield { int: value.int * 2 } as IntValue
           }
         }
 
-        return streamWithoutAck(generator())
+        return generator()
       }
     }))
   })

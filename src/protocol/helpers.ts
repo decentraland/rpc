@@ -26,9 +26,6 @@ export function closeStreamMessage(messageNumber: number, sequenceId: number, po
       ack: false,
       closed: true,
       payload: EMPTY_U8A,
-      requireAck: false,
-      clientStream: false,
-      serverStream: false,
     },
     bb
   )
@@ -49,10 +46,7 @@ export function streamMessage(
       portId,
       ack: false,
       closed: false,
-      payload,
-      requireAck: true,
-      serverStream: false,
-      clientStream: false,
+      payload
     },
     bb
   )
@@ -68,10 +62,7 @@ export function streamAckMessage(messageNumber: number, sequenceId: number, port
       portId,
       ack: true,
       closed: false,
-      payload: EMPTY_U8A,
-      requireAck: true,
-      serverStream: false,
-      clientStream: false,
+      payload: EMPTY_U8A
     },
     bb
   )
@@ -104,7 +95,6 @@ export function parseProtocolMessage(reader: Reader): [number, any, number] | nu
       return [messageType, StreamMessage.decode(reader), messageNumber]
     case RpcMessageTypes.RpcMessageTypes_SERVER_READY:
       return [messageType, null, messageNumber]
-    //return null
     case RpcMessageTypes.RpcMessageTypes_REMOTE_ERROR_RESPONSE:
       return [messageType, RemoteError.decode(reader), messageNumber]
     case RpcMessageTypes.RpcMessageTypes_REQUEST:

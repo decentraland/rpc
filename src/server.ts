@@ -46,14 +46,6 @@ export type CreateRpcServerOptions<Context> = {
   logger?: ILoggerComponent.ILogger
 }
 
-/**
- * @public
- */
-export function streamWithoutAck<T extends object>(args: T) {
-  ;(args as any)[Symbol.for("disable-ack")] = true
-  return args
-}
-
 // only use this writer in synchronous operations. It exists to prevent allocations
 const unsafeSyncWriter = new Writer()
 
@@ -267,7 +259,7 @@ export async function sendServerStream(
   // If the response is instead close=true, then this function returns and
   // no stream.next() is called
   // The following lines are called "stream offer" in the tests.
-  const ret = await dispatcher.sendStreamMessage(reusedStreamMessage, true)
+  const ret = await dispatcher.sendStreamMessage(reusedStreamMessage)
   if (ret.closed) return
   if (!ret.ack) throw new Error("Error in logic, ACK must be true")
 
@@ -388,7 +380,6 @@ export function createRpcServer<Context = {}>(options: CreateRpcServerOptions<Co
     context: Context,
     dispatcher: MessageDispatcher
   ) {
-    // console.log('server: new Message!', messageType)
     if (messageType == RpcMessageTypes.RpcMessageTypes_REQUEST) {
       await handleRequest(parsedMessage, messageNumber, state, transport, context, dispatcher)
     } else if (messageType == RpcMessageTypes.RpcMessageTypes_REQUEST_MODULE) {
@@ -402,11 +393,7 @@ export function createRpcServer<Context = {}>(options: CreateRpcServerOptions<Co
       messageType == RpcMessageTypes.RpcMessageTypes_STREAM_ACK ||
       messageType == RpcMessageTypes.RpcMessageTypes_STREAM_MESSAGE
     ) {
-      // } else if (messageType == RpcMessageTypes.RpcMessageTypes_STREAM_ACK) {
-      //   dispatcher.receiveAck(parsedMessage, messageNumber)
-      // } else if (messageType == RpcMessageTypes.RpcMessageTypes_STREAM_MESSAGE) {
-      //   const receivedStreamMessage = parsedMessage as StreamMessage
-      //   dispatcher.emitStream(messageNumber, receivedStreamMessage)
+      // noops
     } else {
       transport.emit(
         "error",

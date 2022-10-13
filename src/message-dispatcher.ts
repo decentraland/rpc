@@ -12,7 +12,7 @@ type OneTimeListener = { reader: Reader; messageType: number; messageNumber: num
 
 export type MessageDispatcher = {
   transport: Transport
-  sendStreamMessage(data: StreamMessage, useAck: boolean): Promise<SubsetMessage>
+  sendStreamMessage(data: StreamMessage): Promise<SubsetMessage>
   addListener(messageNumber: number, handler: ReaderCallback): void
   addOneTimeListener(messageNumber: number): Promise<OneTimeListener>
   removeListener(messageNumber: number): void
@@ -75,7 +75,7 @@ export function messageDispatcher(transport: Transport): MessageDispatcher {
 
   function closeAll() {
     ackCallbacks.forEach(([resolve]) => resolve({ closed: true, ack: false }))
-    oneTimeCallbacks.forEach(([, reject]) => reject(new Error('')))
+    oneTimeCallbacks.forEach(([, reject]) => reject(new Error('RPC Transport closed')))
     ackCallbacks.clear()
   }
 
@@ -92,8 +92,9 @@ export function messageDispatcher(transport: Transport): MessageDispatcher {
     if (fut) {
       ackCallbacks.delete(key)
       fut[0](data)
-      // } else {
-      //   throw new Error("Received an ACK message for an inexistent handler " + key)
+    // TODO: https://github.com/decentraland/rpc/issues/116
+    //} else {
+    //  throw new Error("Received an ACK message for an inexistent handler " + key)
     }
   }
 
@@ -116,24 +117,19 @@ export function messageDispatcher(transport: Transport): MessageDispatcher {
       listeners.delete(messageId)
     },
 
-    async sendStreamMessage(data: StreamMessage, useAck: boolean): Promise<SubsetMessage> {
-      if (useAck) {
-        const [_, messageNumber] = parseMessageIdentifier(data.messageIdentifier)
-        const key = `${messageNumber},${data.sequenceId}`
+    async sendStreamMessage(data: StreamMessage): Promise<SubsetMessage> {
+      const [_, messageNumber] = parseMessageIdentifier(data.messageIdentifier)
+      const key = `${messageNumber},${data.sequenceId}`
 
-        const ret = new Promise<SubsetMessage>(function ackPromise(ret, rej) {
-          ackCallbacks.set(key, [ret, rej])
-        })
+      const ret = new Promise<SubsetMessage>(function ackPromise(ret, rej) {
+        ackCallbacks.set(key, [ret, rej])
+      })
 
-        bb.reset()
-        StreamMessage.encode(data, bb)
-        transport.sendMessage(bb.finish())
+      bb.reset()
+      StreamMessage.encode(data, bb)
+      transport.sendMessage(bb.finish())
 
-        return ret
-      } else {
-        // TODO: Handle closed=true with a close streaming from client
-        return Promise.resolve({ closed: false, ack: false })
-      }
+      return ret
     },
   }
 }

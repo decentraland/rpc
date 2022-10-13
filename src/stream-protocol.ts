@@ -32,7 +32,7 @@ export async function sendStreamThroughTransport(
     // iterator and the underlying generator. (by exiting this for-await-of)
     // Aditionally, the ack message is used to know WHETHER the client wants to
     // generate another element or cancel the iterator by setting closed=true
-    const ret = await dispatcher.sendStreamMessage(reusedStreamMessage, true)
+    const ret = await dispatcher.sendStreamMessage(reusedStreamMessage)
 
     // we first check for ACK because it is the hot-code-path
     if (ret.ack) {
@@ -98,9 +98,7 @@ export async function sendStreamThroughTransport(
       } else if (action == "next") {
         // mark the stream as opened
         wasOpen = true
-        // if (streamMessage.requireAck) {
         dispatcher.transport.sendMessage(streamAckMessage(messageNumber, lastReceivedSequenceId, portId))
-        // }
       }
     }
   }
@@ -137,7 +135,6 @@ export async function sendStreamThroughTransport(
     generator: channel,
     closeIfNotOpened() {
       if (!wasOpen) {
-        debugger
         channel.close(new Error('ClientStream lost'))
       }
     },

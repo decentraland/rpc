@@ -137,7 +137,6 @@ function createProcedure(
             )
           })
           .catch((error) => {
-            debugger
             requestDispatcher.dispatcher.transport.emit("error", error)
           })
       } else {

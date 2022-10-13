@@ -13,6 +13,7 @@ async function testPort(rpcClient: RpcClient, portName: string) {
   const port = await rpcClient.createPort(portName)
   return (await port.loadModule("echo")) as {
     infinite(): Promise<AsyncGenerator<Uint8Array>>
+    infiniteClientStream(param: AsyncIterable<Uint8Array>): Promise<void> | undefined
   }
 }
 
@@ -191,9 +192,9 @@ test("Unit: AckDispatcher rejects all pending operations on transport error", as
   const ackDispatcher: MessageDispatcher = messageDispatcher(transport.server)
 
   const promises = Promise.allSettled([
-    ackDispatcher.sendStreamMessage({ messageIdentifier: calculateMessageIdentifier(0, 1), sequenceId: 1, payload: '' } as any, true),
-    ackDispatcher.sendStreamMessage({ messageIdentifier: calculateMessageIdentifier(0, 2), sequenceId: 2, payload: '' } as any, true),
-    ackDispatcher.sendStreamMessage({ messageIdentifier: calculateMessageIdentifier(0, 3), sequenceId: 3, payload: '' } as any, true),
+    ackDispatcher.sendStreamMessage({ messageIdentifier: calculateMessageIdentifier(0, 1), sequenceId: 1, payload: '' } as any),
+    ackDispatcher.sendStreamMessage({ messageIdentifier: calculateMessageIdentifier(0, 2), sequenceId: 2, payload: '' } as any),
+    ackDispatcher.sendStreamMessage({ messageIdentifier: calculateMessageIdentifier(0, 3), sequenceId: 3, payload: '' } as any),
   ])
 
   const error = new Error('Error123')
@@ -216,9 +217,9 @@ test("Unit: AckDispatcher rejects all pending operations on transport close", as
   const ackDispatcher: MessageDispatcher = messageDispatcher(transport.server)
 
   const promises = Promise.all([
-    ackDispatcher.sendStreamMessage({ messageIdentifier: calculateMessageIdentifier(0, 1), sequenceId: 1, payload: '' } as any, true),
-    ackDispatcher.sendStreamMessage({ messageIdentifier: calculateMessageIdentifier(0, 2), sequenceId: 2, payload: '' } as any, true),
-    ackDispatcher.sendStreamMessage({ messageIdentifier: calculateMessageIdentifier(0, 3), sequenceId: 3, payload: '' } as any, true),
+    ackDispatcher.sendStreamMessage({ messageIdentifier: calculateMessageIdentifier(0, 1), sequenceId: 1, payload: '' } as any),
+    ackDispatcher.sendStreamMessage({ messageIdentifier: calculateMessageIdentifier(0, 2), sequenceId: 2, payload: '' } as any),
+    ackDispatcher.sendStreamMessage({ messageIdentifier: calculateMessageIdentifier(0, 3), sequenceId: 3, payload: '' } as any),
   ])
 
   transport.server.close()
@@ -305,7 +306,7 @@ describe("Throw in client iterator closes remote iterator after receiving a mess
   })
 })
 
-describe("Close transport closes streams (server side) 1", () => {
+describe("Close transport closes server streams (server side) 1", () => {
   const didClose = future<any>()
   const testEnv = createSimpleTestEnvironment<void>(async function (port) {
     let i = 0
@@ -345,7 +346,7 @@ describe("Close transport closes streams (server side) 1", () => {
 })
 
 
-describe("Close transport closes streams (server side)", () => {
+describe("Close transport closes server streams (server side)", () => {
   let infiniteStreamClosed = false
   const testEnv = createSimpleTestEnvironment<void>(async function (port) {
     port.registerModule("echo", async (port) => ({
@@ -421,7 +422,7 @@ describe("Error in transport finalizes streams", () => {
   })
 })
 
-describe("Close transport closes streams (client side)", () => {
+describe("Close transport closes server streams (client side)", () => {
   let infiniteStreamClosed = 0
   const testEnv = createSimpleTestEnvironment<void>(async function (port) {
     port.registerModule("echo", async (port) => ({
@@ -459,6 +460,91 @@ describe("Close transport closes streams (client side)", () => {
     expect(infiniteStreamClosed).toEqual(2)
   })
 })
+
+describe("Close transport closes client streams (client side)", () => {
+  let infiniteStreamClosed = false
+  const testEnv = createSimpleTestEnvironment<void>(async function (port) {
+    port.registerModule("echo", async (port) => ({
+      async infiniteClientStream(gen: AsyncIterable<Uint8Array>): Promise<void> {
+        for await (const _ of gen) {}
+      }
+    }))
+  })
+
+  it("run the test", async () => {
+    const { rpcClient, transportClient } = await testEnv.start()
+
+    const { infiniteClientStream } = await testPort(rpcClient, "port1")
+
+    expect(infiniteStreamClosed).toBeFalsy()
+    let count = 0
+
+    await expect(async () => {
+      const infiniteGenerator = async function* () {
+        try {
+          infiniteStreamClosed = false
+          while (true) {
+            if (count++ == 10) {
+              transportClient.close()
+              break
+            }
+            yield Uint8Array.from([1])
+          }
+        } finally {
+          infiniteStreamClosed = true
+        }
+      }
+
+      await infiniteClientStream(infiniteGenerator())
+    }).rejects.toThrow("RPC Transport closed")
+
+    // the server AsyncGenerators must be closed after the transport is closed to avoid leaks
+    expect(infiniteStreamClosed).toBeTruthy()
+  })
+})
+
+describe("Close transport closes client streams (server side)", () => {
+  let infiniteStreamClosed = false
+  const testEnv = createSimpleTestEnvironment<void>(async function (port) {
+    port.registerModule("echo", async (port) => ({
+      async infiniteClientStream(gen: AsyncIterable<Uint8Array>): Promise<void> {
+        for await (const _ of gen) {}
+      }
+    }))
+  })
+
+  it("run the test", async () => {
+    const { rpcClient, transportServer } = await testEnv.start()
+
+    const { infiniteClientStream } = await testPort(rpcClient, "port1")
+
+    expect(infiniteStreamClosed).toBeFalsy()
+    let count = 0
+
+    await expect(async () => {
+      const infiniteGenerator = async function* () {
+        try {
+          infiniteStreamClosed = false
+          while (true) {
+            if (count++ == 10) {
+              transportServer.close()
+              break
+            }
+            yield Uint8Array.from([1])
+          }
+        } finally {
+          infiniteStreamClosed = true
+        }
+      }
+
+      await infiniteClientStream(infiniteGenerator())
+    }).rejects.toThrow("RPC Transport closed")
+
+    // the server AsyncGenerators must be closed after the transport is closed to avoid leaks
+    expect(infiniteStreamClosed).toBeTruthy()
+  })
+})
+
 
 describe("Error in server transport closes the iterators", () => {
   let infiniteStreamClosed = false

@@ -2,7 +2,6 @@ import * as codegen from "../src/codegen"
 import { RpcServerPort } from "../src/types"
 import expect from "expect"
 import { Book, BookServiceDefinition, GetBookRequest, QueryBooksRequest } from "./api"
-import { streamWithoutAck } from "../src"
 
 // This file creates the server implementation of BookService defined in api.proto
 
@@ -39,14 +38,11 @@ export function registerBookServiceServerImplementation(port: RpcServerPort<Test
         if (req.authorPrefix == "fail_before_end") throw new Error("fail_before_end")
       }
 
-      return streamWithoutAck(generator())
+      return generator()
     },
     async getBookStream(req: AsyncIterable<GetBookRequest>, context) {
-      for await (const message of req) {
-        console.log('Received client stream: ', message)
-      }
+      for await (const _ of req) {}
 
-      console.log('Done!')
       return {
         author: "kuruk",
         isbn: 2077,
@@ -63,7 +59,7 @@ export function registerBookServiceServerImplementation(port: RpcServerPort<Test
         }
       }
 
-      return streamWithoutAck(generator())
+      return generator()
     }
   }))
 }

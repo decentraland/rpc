@@ -186,7 +186,6 @@ export class AsyncQueue<T> implements AsyncGenerator<T> {
   constructor(private requestingNext: (queue: AsyncQueue<T>, action: "next" | "close") => void) { }
 
   [Symbol.asyncIterator](): AsyncGenerator<T> {
-    debugger
     return this
   }
 

@@ -55,7 +55,6 @@ async function* bookRequestGenerator() {
     const request: GetBookRequest = { isbn: book.isbn }
     yield request
   }
-  console.log('request generator done!')
 }
 
 async function handleClientCreation() {

@@ -34,6 +34,7 @@ async function testPort(rpcClient: RpcClient, portName: string) {
 
 describe("Server stream Helpers simple req/res", () => {
   let remoteCallCounter = 0
+  let asynchronousBidirectionalStreamSum = 0
   let channel: ReturnType<typeof pushableChannel>
 
   const asyncJobs: Promise<any>[] = []
@@ -111,6 +112,21 @@ describe("Server stream Helpers simple req/res", () => {
 
         // returns the index of the async job to run assertions
         return Uint8Array.from([number])
+      },
+      async *asynchronousBidirectionalStream(stream) {
+        if (stream instanceof Uint8Array) throw new Error("argument is not stream")
+        ;(async () => {
+          for await (const $ of stream) {
+            asynchronousBidirectionalStreamSum += $[0]
+          }
+        })()
+
+        let i = 0
+        while (true) {
+          yield Uint8Array.from([i, i * 2])
+          i++
+          if (i === 100) break
+        }
       },
     }))
   })
@@ -377,13 +393,41 @@ describe("Server stream Helpers simple req/res", () => {
       await expect(asyncJobs[jobId]).rejects.toThrow('ClientStream lost')
     })
 
-    // TODO: close transport in the middle of the server stream should throw an error
-    //       in the stream itearator
+    it("client is consumed while server generates results asynchronous", async () => {
+      const { rpcClient } = await testEnv.start()
+      const port = await rpcClient.createPort("test1")
+      const module = (await port.loadModule("echo")) as {
+        asynchronousBidirectionalStream(stream: AsyncIterator<Uint8Array>): Promise<AsyncGenerator<Uint8Array>>
+      }
 
-    // TODO: close transport in the middle of the client stream should throw an error
-    //       in the stream itearator
+      const didFinish = future<boolean>()
 
-    // TODO: random-based bidirectional stream
+      async function* it() {
+        let i = 0
+        try {
+          while (true) {
+            yield new Uint8Array([i++ % 256])
+            if (i === 100) break
+          }
+        } finally {
+          didFinish.resolve(true)
+        }
+      }
+
+
+      const results = await takeAsync(await module.asynchronousBidirectionalStream(it()), 100)
+      expect(results).toHaveLength(100)
+
+      let i = 0
+
+      for (const $ of results) {
+        expect($).toEqual(Uint8Array.from([i, i * 2]))
+        i++
+      }
+
+      expect(await didFinish).toEqual(true)
+      expect(asynchronousBidirectionalStreamSum).toEqual(4950)
+    })
   })
 })
 
