@@ -47,24 +47,6 @@ describe("codegen client & server", () => {
 
         if (req.authorPrefix == "fail_before_end") throw new Error("fail_before_end")
       },
-      async *queryBooksNoAck(req: QueryBooksRequest) {
-        if (req.authorPrefix == "fail_before_yield") throw new Error("fail_before_yield")
-
-        const books = [
-          { author: "mr menduz", isbn: 1234, title: "1001 reasons to write your own OS" },
-          { author: "mr cazala", isbn: 1111, title: "Advanced CSS" },
-          { author: "mr mannakia", isbn: 7666, title: "Advanced binary packing" },
-          { author: "mr kuruk", isbn: 7668, title: "Advanced bots AI" },
-        ]
-
-        for (const book of books) {
-          if (book.author.includes(req.authorPrefix)) {
-            yield book
-          }
-        }
-
-        if (req.authorPrefix == "fail_before_end") throw new Error("fail_before_end")
-      },
       async emptyQuery() {
         return { author: "", isbn: 0, title: "" }
       },
@@ -164,18 +146,7 @@ describe("codegen client & server", () => {
     expect(ret.author).toEqual("menduz")
   })
 
-  it("calls a streaming method", async () => {
-    const results: Book[] = []
-
-    for await (const book of service.queryBooks({ authorPrefix: "mr" })) {
-      expect(book.author).toMatch(/^mr\s.+/)
-      results.push(book)
-    }
-
-    expect(results).toHaveLength(4)
-  })
-
-  it("calls a streaming method NoAck", async () => {
+  it.only("calls a streaming method", async () => {
     const results: Book[] = []
 
     for await (const book of service.queryBooks({ authorPrefix: "mr" })) {

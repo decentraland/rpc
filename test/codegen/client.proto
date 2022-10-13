@@ -26,7 +26,6 @@ message IntValue {
 service BookService {
   rpc GetBook(GetBookRequest) returns (Book) {}
   rpc QueryBooks(QueryBooksRequest) returns (stream Book) {}
-  rpc QueryBooksNoAck(QueryBooksRequest) returns (stream Book) {}
   rpc EmptyQuery(Empty) returns (Book) {}
   rpc EmptyResponse(Book) returns (Empty) {}
   rpc EmptyResponseStream(Book) returns (stream Empty) {}
