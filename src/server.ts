@@ -25,11 +25,18 @@ import {
   RpcMessageTypes,
   StreamMessage,
 } from "./protocol"
-import { ILoggerComponent } from "@well-known-components/interfaces"
 import { MessageDispatcher, messageDispatcher } from "./message-dispatcher"
 import { sendStreamThroughTransport, streamFromDispatcher } from "./stream-protocol"
 
 let lastPortId = 0
+
+export type ILogger = {
+  log(message: string, extra?: Record<string, string | number>): void;
+  error(error: string | Error, extra?: Record<string, string | number>): void;
+  debug(message: string, extra?: Record<string, string | number>): void;
+  info(message: string, extra?: Record<string, string | number>): void;
+  warn(message: string, extra?: Record<string, string | number>): void;
+};
 
 type RpcServerState = {
   transports: Set<Transport>
@@ -43,7 +50,7 @@ const EMPTY_U8A = Uint8Array.from([])
  * @public
  */
 export type CreateRpcServerOptions<Context> = {
-  logger?: ILoggerComponent.ILogger
+  logger?: ILogger
 }
 
 // only use this writer in synchronous operations. It exists to prevent allocations

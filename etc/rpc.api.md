@@ -5,7 +5,6 @@
 ```ts
 
 import { Emitter } from 'mitt';
-import { ILoggerComponent } from '@well-known-components/interfaces';
 
 // @public (undocumented)
 export type AsyncProcedureResultClient = Promise<Uint8Array | AsyncGenerator<Uint8Array> | void>;
@@ -30,7 +29,16 @@ export function createRpcServer<Context = {}>(options: CreateRpcServerOptions<Co
 
 // @public (undocumented)
 export type CreateRpcServerOptions<Context> = {
-    logger?: ILoggerComponent.ILogger;
+    logger?: ILogger;
+};
+
+// @public (undocumented)
+export type ILogger = {
+    log(message: string, extra?: Record<string, string | number>): void;
+    error(error: string | Error, extra?: Record<string, string | number>): void;
+    debug(message: string, extra?: Record<string, string | number>): void;
+    info(message: string, extra?: Record<string, string | number>): void;
+    warn(message: string, extra?: Record<string, string | number>): void;
 };
 
 // @public (undocumented)
