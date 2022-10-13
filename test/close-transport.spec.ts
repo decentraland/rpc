@@ -1,17 +1,19 @@
-import { RpcClient, sendStream } from "../src"
+import { RpcClient, sendServerStream } from "../src"
 import { calculateMessageIdentifier } from "../src/protocol/helpers"
 import { RpcMessageHeader, RpcMessageTypes, StreamMessage } from "../src/protocol"
 import { createSimpleTestEnvironment, delay } from "./helpers"
-import { AckDispatcher, createAckHelper } from "../src/ack-helper"
 import future from "fp-future"
 import { MemoryTransport } from "../src/transports/Memory"
 import { log } from "./logger"
 import { AsyncQueue } from "../src/push-channel"
+import { GlobalHandlerFunction, MessageDispatcher, messageDispatcher } from "../src/message-dispatcher"
+import { Reader } from "protobufjs"
 
 async function testPort(rpcClient: RpcClient, portName: string) {
   const port = await rpcClient.createPort(portName)
   return (await port.loadModule("echo")) as {
     infinite(): Promise<AsyncGenerator<Uint8Array>>
+    infiniteClientStream(param: AsyncIterable<Uint8Array>): Promise<void> | undefined
   }
 }
 
@@ -23,16 +25,28 @@ async function testPort(rpcClient: RpcClient, portName: string) {
 test("Unit: server sendStream doesn't consume an element from the generator unless specifically asked", async () => {
   const messageQueue = new AsyncQueue<Partial<StreamMessage>>(log)
 
-  const ackDispatcher: AckDispatcher = {
-    receiveAck() { },
-    async sendWithAck(data) {
+  const dispatcher: MessageDispatcher = {
+    async sendStreamMessage(data) {
       return await (await messageQueue.next()).value
+    },
+    transport: undefined,
+    addListener: function (messageNumber: number, handler: (reader: Reader, messageType: number, messageNumber: number, message: any) => void): void {
+      throw new Error("Function not implemented.")
+    },
+    async addOneTimeListener(){
+      throw new Error("Function not implemented.")
+    },
+    removeListener: function (messageNumber: number): void {
+      throw new Error("Function not implemented.")
+    },
+    setGlobalHandler: function (globalHandler: GlobalHandlerFunction): void {
+      throw new Error("Function not implemented.")
     }
   }
 
   const transport = MemoryTransport()
   const sendMessageSpy = jest.spyOn(transport.client, 'sendMessage')
-  const sendWithAckSpy = jest.spyOn(ackDispatcher, 'sendWithAck')
+  const sendWithAckSpy = jest.spyOn(dispatcher, 'sendStreamMessage')
 
   function generator() {
     const ret: AsyncGenerator<Uint8Array> = {
@@ -45,7 +59,7 @@ test("Unit: server sendStream doesn't consume an element from the generator unle
   }
 
   await Promise.all([
-    sendStream(ackDispatcher, transport.client, generator(), 0, 0).catch(log),
+    sendServerStream(dispatcher, transport.client, generator(), 0, 0).catch(log),
     // this message responds to the "stream offer" by closing it.
     // IN SOME CASES, the client may not need to consume the stream. Since we are
     // creating a "safe" API to handle resources and possibly signatures in the
@@ -64,16 +78,28 @@ test("Unit: server sendStream doesn't consume an element from the generator unle
 test("Unit: server sendStream finalizes iterator upon failed ACK", async () => {
   const messageQueue = new AsyncQueue<Partial<StreamMessage>>(log)
 
-  const ackDispatcher: AckDispatcher = {
-    receiveAck() { },
-    async sendWithAck(data) {
+  const dispatcher: MessageDispatcher = {
+    async sendStreamMessage(data) {
       return await (await messageQueue.next()).value
+    },
+    transport: undefined,
+    addListener: function (messageNumber: number, handler: (reader: Reader, messageType: number, messageNumber: number, message: any) => void): void {
+      throw new Error("Function not implemented.")
+    },
+    async addOneTimeListener(){
+      throw new Error("Function not implemented.")
+    },
+    removeListener: function (messageNumber: number): void {
+      throw new Error("Function not implemented.")
+    },
+    setGlobalHandler: function (globalHandler: GlobalHandlerFunction): void {
+      throw new Error("Function not implemented.")
     }
   }
 
   const transport = MemoryTransport()
   const sendMessageSpy = jest.spyOn(transport.client, 'sendMessage')
-  const sendWithAckSpy = jest.spyOn(ackDispatcher, 'sendWithAck')
+  const sendWithAckSpy = jest.spyOn(dispatcher, 'sendStreamMessage')
 
   let finalized = false
 
@@ -93,7 +119,7 @@ test("Unit: server sendStream finalizes iterator upon failed ACK", async () => {
   }
 
   await Promise.all([
-    sendStream(ackDispatcher, transport.client, generator(), 0, 0).catch(log),
+    sendServerStream(dispatcher, transport.client, generator(), 0, 0).catch(log),
     // this message responds to the "stream offer"
     messageQueue.enqueue({ ack: true, closed: false }),
     // this message asks for an element of the stream to be consumed
@@ -113,11 +139,23 @@ test("Unit: server sendStream finalizes iterator upon failed ACK", async () => {
  * This test ensures that the server sends a close message after the iterator returns a value
  */
 test("Unit: server sendStream sends a close message after iterator finalizes", async () => {
-  const ackDispatcher: AckDispatcher = {
-    receiveAck() { },
-    async sendWithAck(data) {
+  const dispatcher: MessageDispatcher = {
+    async sendStreamMessage(data) {
       if (data.sequenceId != 0) throw new Error('never called')
       return Promise.resolve({ closed: false, ack: true } as any)
+    },
+    transport: undefined,
+    addListener: function (messageNumber: number, handler: (reader: Reader, messageType: number, messageNumber: number, message: any) => void): void {
+      throw new Error("Function not implemented.")
+    },
+    async addOneTimeListener(){
+      throw new Error("Function not implemented.")
+    },
+    removeListener: function (messageNumber: number): void {
+      throw new Error("Function not implemented.")
+    },
+    setGlobalHandler: function (globalHandler: GlobalHandlerFunction): void {
+      throw new Error("Function not implemented.")
     }
   }
 
@@ -139,7 +177,7 @@ test("Unit: server sendStream sends a close message after iterator finalizes", a
     return ret
   }
 
-  await sendStream(ackDispatcher, transport.client, generator(), 0, 0)
+  await sendServerStream(dispatcher, transport.client, generator(), 0, 0)
 
   expect(sendMessageSpy).toBeCalledTimes(1)
 })
@@ -151,12 +189,12 @@ test("Unit: server sendStream sends a close message after iterator finalizes", a
  */
 test("Unit: AckDispatcher rejects all pending operations on transport error", async () => {
   const transport = MemoryTransport()
-  const ackDispatcher: AckDispatcher = createAckHelper(transport.server)
+  const ackDispatcher: MessageDispatcher = messageDispatcher(transport.server)
 
   const promises = Promise.allSettled([
-    ackDispatcher.sendWithAck({ messageIdentifier: calculateMessageIdentifier(0, 1), sequenceId: 1, payload: '' } as any),
-    ackDispatcher.sendWithAck({ messageIdentifier: calculateMessageIdentifier(0, 2), sequenceId: 2, payload: '' } as any),
-    ackDispatcher.sendWithAck({ messageIdentifier: calculateMessageIdentifier(0, 3), sequenceId: 3, payload: '' } as any),
+    ackDispatcher.sendStreamMessage({ messageIdentifier: calculateMessageIdentifier(0, 1), sequenceId: 1, payload: '' } as any),
+    ackDispatcher.sendStreamMessage({ messageIdentifier: calculateMessageIdentifier(0, 2), sequenceId: 2, payload: '' } as any),
+    ackDispatcher.sendStreamMessage({ messageIdentifier: calculateMessageIdentifier(0, 3), sequenceId: 3, payload: '' } as any),
   ])
 
   const error = new Error('Error123')
@@ -176,12 +214,12 @@ test("Unit: AckDispatcher rejects all pending operations on transport error", as
  */
 test("Unit: AckDispatcher rejects all pending operations on transport close", async () => {
   const transport = MemoryTransport()
-  const ackDispatcher: AckDispatcher = createAckHelper(transport.server)
+  const ackDispatcher: MessageDispatcher = messageDispatcher(transport.server)
 
   const promises = Promise.all([
-    ackDispatcher.sendWithAck({ messageIdentifier: calculateMessageIdentifier(0, 1), sequenceId: 1, payload: '' } as any),
-    ackDispatcher.sendWithAck({ messageIdentifier: calculateMessageIdentifier(0, 2), sequenceId: 2, payload: '' } as any),
-    ackDispatcher.sendWithAck({ messageIdentifier: calculateMessageIdentifier(0, 3), sequenceId: 3, payload: '' } as any),
+    ackDispatcher.sendStreamMessage({ messageIdentifier: calculateMessageIdentifier(0, 1), sequenceId: 1, payload: '' } as any),
+    ackDispatcher.sendStreamMessage({ messageIdentifier: calculateMessageIdentifier(0, 2), sequenceId: 2, payload: '' } as any),
+    ackDispatcher.sendStreamMessage({ messageIdentifier: calculateMessageIdentifier(0, 3), sequenceId: 3, payload: '' } as any),
   ])
 
   transport.server.close()
@@ -268,7 +306,7 @@ describe("Throw in client iterator closes remote iterator after receiving a mess
   })
 })
 
-describe("Close transport closes streams (server side) 1", () => {
+describe("Close transport closes server streams (server side) 1", () => {
   const didClose = future<any>()
   const testEnv = createSimpleTestEnvironment<void>(async function (port) {
     let i = 0
@@ -308,7 +346,7 @@ describe("Close transport closes streams (server side) 1", () => {
 })
 
 
-describe("Close transport closes streams (server side)", () => {
+describe("Close transport closes server streams (server side)", () => {
   let infiniteStreamClosed = false
   const testEnv = createSimpleTestEnvironment<void>(async function (port) {
     port.registerModule("echo", async (port) => ({
@@ -384,7 +422,7 @@ describe("Error in transport finalizes streams", () => {
   })
 })
 
-describe("Close transport closes streams (client side)", () => {
+describe("Close transport closes server streams (client side)", () => {
   let infiniteStreamClosed = 0
   const testEnv = createSimpleTestEnvironment<void>(async function (port) {
     port.registerModule("echo", async (port) => ({
@@ -422,6 +460,91 @@ describe("Close transport closes streams (client side)", () => {
     expect(infiniteStreamClosed).toEqual(2)
   })
 })
+
+describe("Close transport closes client streams (client side)", () => {
+  let infiniteStreamClosed = false
+  const testEnv = createSimpleTestEnvironment<void>(async function (port) {
+    port.registerModule("echo", async (port) => ({
+      async infiniteClientStream(gen: AsyncIterable<Uint8Array>): Promise<void> {
+        for await (const _ of gen) {}
+      }
+    }))
+  })
+
+  it("run the test", async () => {
+    const { rpcClient, transportClient } = await testEnv.start()
+
+    const { infiniteClientStream } = await testPort(rpcClient, "port1")
+
+    expect(infiniteStreamClosed).toBeFalsy()
+    let count = 0
+
+    await expect(async () => {
+      const infiniteGenerator = async function* () {
+        try {
+          infiniteStreamClosed = false
+          while (true) {
+            if (count++ == 10) {
+              transportClient.close()
+              break
+            }
+            yield Uint8Array.from([1])
+          }
+        } finally {
+          infiniteStreamClosed = true
+        }
+      }
+
+      await infiniteClientStream(infiniteGenerator())
+    }).rejects.toThrow("RPC Transport closed")
+
+    // the server AsyncGenerators must be closed after the transport is closed to avoid leaks
+    expect(infiniteStreamClosed).toBeTruthy()
+  })
+})
+
+describe("Close transport closes client streams (server side)", () => {
+  let infiniteStreamClosed = false
+  const testEnv = createSimpleTestEnvironment<void>(async function (port) {
+    port.registerModule("echo", async (port) => ({
+      async infiniteClientStream(gen: AsyncIterable<Uint8Array>): Promise<void> {
+        for await (const _ of gen) {}
+      }
+    }))
+  })
+
+  it("run the test", async () => {
+    const { rpcClient, transportServer } = await testEnv.start()
+
+    const { infiniteClientStream } = await testPort(rpcClient, "port1")
+
+    expect(infiniteStreamClosed).toBeFalsy()
+    let count = 0
+
+    await expect(async () => {
+      const infiniteGenerator = async function* () {
+        try {
+          infiniteStreamClosed = false
+          while (true) {
+            if (count++ == 10) {
+              transportServer.close()
+              break
+            }
+            yield Uint8Array.from([1])
+          }
+        } finally {
+          infiniteStreamClosed = true
+        }
+      }
+
+      await infiniteClientStream(infiniteGenerator())
+    }).rejects.toThrow("RPC Transport closed")
+
+    // the server AsyncGenerators must be closed after the transport is closed to avoid leaks
+    expect(infiniteStreamClosed).toBeTruthy()
+  })
+})
+
 
 describe("Error in server transport closes the iterators", () => {
   let infiniteStreamClosed = false

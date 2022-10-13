@@ -32,7 +32,7 @@ proto.addEnum("RpcMessageTypes", {
   REMOTE_ERROR_RESPONSE: 9,
   DESTROY_PORT: 10,
 
-  SERVER_READY: 11,
+  SERVER_READY: 11
 })
 
 /////////////////////////////////////////////////////////////
@@ -107,6 +107,7 @@ proto.addMessage(
   [
     PORT_ID,
     field("fixed32", "procedure_id", 4), // id of the procedure to be called
+    field("fixed32", "client_stream", 5),
     PAYLOAD, // payload of the request (this protocol doesn't care about the content)
   ],
   ["RpcMessageHeader"]
@@ -143,7 +144,7 @@ proto.addMessage(
  *              with async iterators in mind (think about js sagas).
  * @direction   Server->Client/Client->Server
  */
-proto.addMessage(
+ proto.addMessage(
   "StreamMessage",
   [
     PORT_ID,

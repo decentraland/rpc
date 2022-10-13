@@ -1,5 +1,13 @@
 import { future } from "fp-future"
-import { AlmostEmpty, Book, BookServiceDefinition, Empty, GetBookRequest, QueryBooksRequest } from "./codegen/client"
+import {
+  AlmostEmpty,
+  Book,
+  BookServiceDefinition,
+  Empty,
+  GetBookRequest,
+  QueryBooksRequest,
+  IntValue,
+} from "./codegen/client"
 import { createSimpleTestEnvironment, delay, takeAsync } from "./helpers"
 import * as codegen from "../src/codegen"
 import { from, lastValueFrom, take } from "rxjs"
@@ -109,6 +117,23 @@ describe("codegen client & server", () => {
 
         return ret
       },
+      async addAllValues(req: AsyncIterable<IntValue>) {
+        let sum = 0
+        for await (const value of req) {
+          sum += value.int
+        }
+
+        return { int: sum }
+      },
+      multipleBy2(req: AsyncIterable<IntValue>) {
+        const generator = async function*() {
+          for await (const value of req) {
+            yield { int: value.int * 2 } as IntValue
+          }
+        }
+
+        return generator()
+      }
     }))
   })
 
@@ -321,5 +346,35 @@ describe("codegen client & server", () => {
     expect(values).toEqual([{ int: 1 }, { int: 2 }, { int: 3 }])
     expect(infiniteGeneratorEmited).toEqual(3)
     expect(infiniteGeneratorClosed).toEqual(1)
+  })
+
+  it("Add all numbers in the client stream", async () => {
+    const numberGenerator = async function*() {
+      yield IntValue.fromJSON({ int: 1 })
+      yield IntValue.fromJSON({ int: 2 })
+      yield IntValue.fromJSON({ int: 4 })
+      yield IntValue.fromJSON({ int: 8 })
+    }
+
+    const result = await service.addAllValues(numberGenerator())
+
+    expect(result).toEqual({ int: 15 })
+  })
+
+  it("Consume all values from clientStream", async () => {
+    const numberGenerator = async function*() {
+      yield IntValue.fromJSON({ int: 1 })
+      yield IntValue.fromJSON({ int: 2 })
+      yield IntValue.fromJSON({ int: 4 })
+      yield IntValue.fromJSON({ int: 8 })
+    }
+
+    const results: AlmostEmpty[] = []
+
+    for await (const res of service.multipleBy2(numberGenerator())) {
+      results.push(res)
+    }
+
+    expect(results).toEqual([{ int: 2 }, { int: 4 }, { int: 8 }, { int: 16 }])
   })
 })

@@ -19,6 +19,10 @@ message AlmostEmpty {
   int32 int = 1;
 }
 
+message IntValue {
+  int32 int = 1;
+}
+
 service BookService {
   rpc GetBook(GetBookRequest) returns (Book) {}
   rpc QueryBooks(QueryBooksRequest) returns (stream Book) {}
@@ -29,4 +33,6 @@ service BookService {
   rpc AlmostEmptyResponseStream(Book) returns (stream AlmostEmpty) {}
   rpc InfiniteGenerator(Empty) returns (stream AlmostEmpty) {}
   rpc FailFirstGenerator(Empty) returns (stream AlmostEmpty) {}
+  rpc AddAllValues(stream IntValue) returns (IntValue) {}
+  rpc MultipleBy2(stream IntValue) returns (stream IntValue) {}
 }

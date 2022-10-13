@@ -41,11 +41,11 @@ export type AsyncProcedureResultClient = Promise<Uint8Array | AsyncGenerator<Uin
 /**
  * @public
  */
-export type CallableProcedureServer<Context> = (payload: Uint8Array, context: Context) => AsyncProcedureResultServer
+export type CallableProcedureServer<Context> = (payload: Uint8Array | AsyncIterable<Uint8Array>, context: Context) => AsyncProcedureResultServer
 /**
  * @public
  */
-export type CallableProcedureClient = (payload: Uint8Array) => AsyncProcedureResultClient
+export type CallableProcedureClient = (payload: Uint8Array | AsyncIterable<Uint8Array>) => AsyncProcedureResultClient
 /**
  * @public
  */
@@ -131,7 +131,7 @@ export type RpcServerPort<Context> = Pick<Emitter<RpcPortEvents>, "on" | "emit">
    * Used to load modules based on their definition and availability.
    */
   loadModule(moduleName: string): Promise<ServerModuleDeclaration<any>>
-  callProcedure(procedureId: number, argument: Uint8Array, context: Context): AsyncProcedureResultServer
+  callProcedure(procedureId: number, argument: Uint8Array | AsyncIterable<Uint8Array>, context: Context): AsyncProcedureResultServer
   close(): void
 }
 

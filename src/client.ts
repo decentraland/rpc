@@ -1,7 +1,6 @@
 import { CallableProcedureClient, ClientModuleDefinition, RpcClient, RpcClientPort, RpcPortEvents } from "."
 import { Transport } from "./types"
 import mitt from "mitt"
-import future, { IFuture } from "fp-future"
 import { Writer } from "protobufjs/minimal"
 import {
   CreatePort,
@@ -15,19 +14,19 @@ import {
   RpcMessageTypes,
   StreamMessage,
 } from "./protocol"
-import { MessageDispatcher, messageNumberHandler } from "./message-number-handler"
-import { AsyncQueue, linkedList, pushableChannel } from "./push-channel"
-import {
-  calculateMessageIdentifier,
-  closeStreamMessage,
-  parseProtocolMessage,
-  streamAckMessage,
-} from "./protocol/helpers"
+import { messageDispatcher } from "./message-dispatcher"
+import { calculateMessageIdentifier, parseProtocolMessage } from "./protocol/helpers"
+import { ClientRequestDispatcher, createClientRequestDispatcher } from "./client-request-dispatcher"
+import { sendStreamThroughTransport, streamFromDispatcher } from "./stream-protocol"
 
 const EMPTY_U8 = new Uint8Array(0)
 
 // @internal
-export function createPort(portId: number, portName: string, dispatcher: MessageDispatcher): RpcClientPort {
+export function createPort(
+  portId: number,
+  portName: string,
+  requestDispatcher: ClientRequestDispatcher
+): RpcClientPort {
   const events = mitt<RpcPortEvents>()
 
   let state: "open" | "closed" = "open"
@@ -51,11 +50,11 @@ export function createPort(portId: number, portName: string, dispatcher: Message
         },
         bb
       )
-      dispatcher.transport.sendMessage(bb.finish())
+      requestDispatcher.dispatcher.transport.sendMessage(bb.finish())
       events.emit("close", {})
     },
     async loadModule(moduleName: string) {
-      const ret = await dispatcher.request((bb, messageNumber) => {
+      const ret = await requestDispatcher.request((bb, messageNumber) => {
         RequestModule.encode(
           {
             messageIdentifier: calculateMessageIdentifier(
@@ -75,7 +74,7 @@ export function createPort(portId: number, portName: string, dispatcher: Message
           const ret: ClientModuleDefinition = {}
 
           for (let procedure of (message as RequestModuleResponse).procedures) {
-            ret[procedure.procedureName] = createProcedure(portId, procedure.procedureId, dispatcher)
+            ret[procedure.procedureName] = createProcedure(portId, procedure.procedureId, requestDispatcher)
           }
 
           return ret
@@ -92,117 +91,63 @@ function throwIfRemoteError(parsedMessage: RemoteError) {
   throw new Error("RemoteError: " + parsedMessage.errorMessage)
 }
 
-
 /**
- * If a StreamMessage is received, then it means we have the POSSIBILITY to
- * consume a remote generator. The client must answer every ACK with the next
- * inteded action, could be: next(), close(). Both actions are serialized in the
- * StreamMessage. The server MUST NOT generate any new element of the generator
- * if the client doesn't ask for it.
- *
- * The whole protocol is designed to be SLOW AND SECURE, that means, ACKs (slow)
- * will block the generation and consumption of iterators (secure).
- *
- * That exist to save the memory of the servers and to generate the much needed
- * backpressure.
- *
- * If throughput is what you are looking for, you may better use bigger messages
- * containing serialized lists. Effectively reducing the number of messages
- * and increasing their size.
- *
+ * This function is called client side, to generate an adapter for the protocol.
+ * The client must accept an U8 or AsyncIterable<U8> as parameter.
+ * And must return whatever the server decides, either it be an U8 or AsyncIterable<U8>
  * @internal
  */
-export function streamFromDispatcher(
-  dispatcher: MessageDispatcher,
-  streamMessage: StreamMessage,
-  messageNumber: number
-): AsyncGenerator<Uint8Array> {
-  let lastReceivedSequenceId = 0
-  let isRemoteClosed = false
-
-  const channel = new AsyncQueue<Uint8Array>(sendServerSignals)
-
-  dispatcher.transport.on("close", () => {
-    channel.close(new Error("RPC Transport closed"))
-  })
-
-  dispatcher.transport.on("error", () => {
-    channel.close(new Error("RPC Transport failed"))
-  })
-
-  // This function is called at two moments
-  // 1. When the channel is closed or fails -> an ACK closing the stream is sent to the server
-  // 2. When the channel.next() is called   -> an ACK requesting the next elem is sent to the server
-  function sendServerSignals(_channel: AsyncQueue<Uint8Array>, action: "close" | "next") {
-    if (action == "close") {
-      dispatcher.removeListener(messageNumber)
-    }
-    if (!isRemoteClosed) {
-      if (action == "close") {
-        dispatcher.transport.sendMessage(closeStreamMessage(messageNumber, lastReceivedSequenceId, streamMessage.portId))
-      } else if (action == "next") {
-        dispatcher.transport.sendMessage(streamAckMessage(messageNumber, lastReceivedSequenceId, streamMessage.portId))
-      }
-    }
-  }
-
-  // receive a message from the server and send it to the iterable channel
-  function processMessage(message: StreamMessage) {
-    lastReceivedSequenceId = message.sequenceId
-
-    if (message.closed) {
-      // when the server CLOSES the stream, then we raise the flag isRemoteClosed
-      // to prevent sending an extra closeStreamMessage to the server after closing
-      // our channel.
-      // IMPORTANT: If the server closes the connection, then we DONT send the ACK
-      //            back to the server because it is redundant information.
-      isRemoteClosed = true
-      channel.close()
-    } else {
-      channel.enqueue(message.payload)
-    }
-  }
-
-  dispatcher.addListener(messageNumber, (reader) => {
-    const ret = parseProtocolMessage(reader)
-
-    if (ret) {
-      const [messageType, message] = ret
-      if (messageType == RpcMessageTypes.RpcMessageTypes_STREAM_MESSAGE) {
-        processMessage(message)
-      } else if (messageType == RpcMessageTypes.RpcMessageTypes_REMOTE_ERROR_RESPONSE) {
-        isRemoteClosed = true
-        channel.close(
-          new Error("RemoteError: " + ((message as RemoteError).errorMessage || "Unknown remote error"))
-        )
-      } else {
-        channel.close(new Error("RemoteError: Protocol error"))
-      }
-    } else {
-      channel.close(new Error("RemoteError: Protocol error"))
-    }
-  })
-
-  return channel
-}
-
-// @internal
-function createProcedure(portId: number, procedureId: number, dispatcher: MessageDispatcher): CallableProcedureClient {
-  const callProcedurePacket = {
+function createProcedure(
+  portId: number,
+  procedureId: number,
+  requestDispatcher: ClientRequestDispatcher
+): CallableProcedureClient {
+  const callProcedurePacket: Request = {
     portId,
     messageIdentifier: 0,
     payload: EMPTY_U8,
     procedureId,
+    clientStream: 0,
   }
 
   return async function (data) {
+    // TODO: Move to a function helper
     if (data) {
-      callProcedurePacket.payload = data
+      if (Symbol.asyncIterator in data) {
+        // if we are going to generate a client stream, it will be handled with a new
+        // message ID
+        const messageNumber = requestDispatcher.nextMessageNumber()
+        callProcedurePacket.clientStream = messageNumber
+        callProcedurePacket.payload = EMPTY_U8
+
+        requestDispatcher.dispatcher
+          .addOneTimeListener(messageNumber)
+          .then(($) => {
+            const message = $.message as StreamMessage
+
+            if (message.closed) return
+            if (!message.ack) throw new Error("Error in logic, ACK must be true")
+
+            sendStreamThroughTransport(
+              requestDispatcher.dispatcher,
+              requestDispatcher.dispatcher.transport,
+              data as any,
+              portId,
+              messageNumber
+            )
+          })
+          .catch((error) => {
+            requestDispatcher.dispatcher.transport.emit("error", error)
+          })
+      } else {
+        callProcedurePacket.payload = data as Uint8Array
+      }
     } else {
       callProcedurePacket.payload = EMPTY_U8
     }
+
     const ret = parseProtocolMessage(
-      await dispatcher.request((bb, messageNumber) => {
+      await requestDispatcher.request((bb, messageNumber) => {
         callProcedurePacket.messageIdentifier = calculateMessageIdentifier(
           RpcMessageTypes.RpcMessageTypes_REQUEST,
           messageNumber
@@ -221,10 +166,16 @@ function createProcedure(portId: number, procedureId: number, dispatcher: Messag
           return undefined
         }
       } else if (messageType == RpcMessageTypes.RpcMessageTypes_STREAM_MESSAGE) {
-        // If a StreamMessage is received, then it means we have the POSSIBILITY
+        // If a OpenStream is received with an serverStream, then it means we have the POSSIBILITY
         // to consume a remote generator. Look into the streamFromDispatcher functions
         // for more information.
-        return streamFromDispatcher(dispatcher, message, messageNumber)
+        const openStreamMessage = message as StreamMessage
+        const { generator } = streamFromDispatcher(
+          requestDispatcher.dispatcher,
+          openStreamMessage.portId,
+          messageNumber
+        )
+        return generator
       } else if (messageType == RpcMessageTypes.RpcMessageTypes_REMOTE_ERROR_RESPONSE) {
         throwIfRemoteError(message)
       }
@@ -238,10 +189,11 @@ function createProcedure(portId: number, procedureId: number, dispatcher: Messag
 export async function createRpcClient(transport: Transport): Promise<RpcClient> {
   const clientPortByName = new Map<string, Promise<RpcClientPort>>()
 
-  const dispatcher = messageNumberHandler(transport)
+  const dispatcher = messageDispatcher(transport)
+  const requestDispatcher = createClientRequestDispatcher(dispatcher)
 
   async function internalCreatePort(portName: string): Promise<RpcClientPort> {
-    const ret = await dispatcher.request((bb, messageNumber) => {
+    const ret = await requestDispatcher.request((bb, messageNumber) => {
       CreatePort.encode(
         {
           messageIdentifier: calculateMessageIdentifier(RpcMessageTypes.RpcMessageTypes_CREATE_PORT, messageNumber),
@@ -258,7 +210,7 @@ export async function createRpcClient(transport: Transport): Promise<RpcClient> 
 
       if (messageType == RpcMessageTypes.RpcMessageTypes_CREATE_PORT_RESPONSE) {
         const portId = (message as CreatePortResponse).portId
-        return createPort(portId, portName, dispatcher)
+        return createPort(portId, portName, requestDispatcher)
       } else if (messageType == RpcMessageTypes.RpcMessageTypes_REMOTE_ERROR_RESPONSE) {
         throwIfRemoteError(message)
       }

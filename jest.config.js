@@ -11,6 +11,7 @@ module.exports = {
   coveragePathIgnorePatterns: [
     "/node_modules/",
     "/test/",
+    "/src/protocol/index.ts",
     "/src/protocol/index_pb.js",
   ],
   coverageDirectory: "coverage",

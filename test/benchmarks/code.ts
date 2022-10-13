@@ -36,7 +36,9 @@ export async function test() {
       async emptyResponse() { throw new Error('not implemented') },
       async *emptyResponseStream() { throw new Error('not implemented') },
       async *infiniteGenerator() { throw new Error('not implemented') },
-      async *failFirstGenerator() { throw new Error('not implemented') }
+      async *failFirstGenerator() { throw new Error('not implemented') },
+      async addAllValues() { throw new Error('not implemented') },
+      async *multipleBy2() { throw new Error('not implemented') },
     }))
   })
 

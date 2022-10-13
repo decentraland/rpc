@@ -106,13 +106,13 @@ export type ClientMethod<
   ? Definition["responseStream"] extends false
     ? UnaryClientMethod<MethodRequest<Definition>, MethodResponse<Definition>, CallOptionsExt>
     : Definition["responseStream"] extends true
-    ? ServerStreamingClientMethod<MethodRequest<Definition>, MethodResponse<Definition>, CallOptionsExt>
+    ? ServerStreamingMethod<MethodRequest<Definition>, MethodResponse<Definition>, CallOptionsExt>
     : never
   : Definition["requestStream"] extends true
   ? Definition["responseStream"] extends false
-    ? ClientStreamingClientMethod<MethodRequest<Definition>, MethodResponse<Definition>, CallOptionsExt>
+    ? ClientStreamingMethod<MethodRequest<Definition>, MethodResponse<Definition>, CallOptionsExt>
     : Definition["responseStream"] extends true
-    ? BidiStreamingClientMethod<MethodRequest<Definition>, MethodResponse<Definition>, CallOptionsExt>
+    ? BidirectionalStreamingMethod<MethodRequest<Definition>, MethodResponse<Definition>, CallOptionsExt>
     : never
   : never
 
@@ -121,17 +121,18 @@ export type UnaryClientMethod<Request, Response, CallOptionsExt = {}> = (
   options?: CallOptions & CallOptionsExt
 ) => Promise<Response>
 
-export type ServerStreamingClientMethod<Request, Response, CallOptionsExt = {}> = (
+
+export type ServerStreamingMethod<Request, Response, CallOptionsExt = {}> = (
   request: Request,
   options?: CallOptions & CallOptionsExt
 ) => AsyncGenerator<Response>
 
-export type ClientStreamingClientMethod<Request, Response, CallOptionsExt = {}> = (
+export type ClientStreamingMethod<Request, Response, CallOptionsExt = {}> = (
   request: AsyncIterable<Request>,
   options?: CallOptions & CallOptionsExt
 ) => Promise<Response>
 
-export type BidiStreamingClientMethod<Request, Response, CallOptionsExt = {}> = (
+export type BidirectionalStreamingMethod<Request, Response, CallOptionsExt = {}> = (
   request: AsyncIterable<Request>,
   options?: CallOptions & CallOptionsExt
 ) => AsyncGenerator<Response>

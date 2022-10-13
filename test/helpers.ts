@@ -8,11 +8,11 @@ import {
 import { log } from "./logger"
 import { inspect } from "util"
 import { MemoryTransport, MemoryTransportOptions } from "../src/transports/Memory"
-import { parseProtocolMessage } from "../src/protocol/helpers"
+import { parseMessageIdentifier, parseProtocolMessage } from "../src/protocol/helpers"
 import { Reader } from "protobufjs/minimal"
 
 // async Array.from(generator*) with support for max elements
-export async function takeAsync<T>(iter: AsyncGenerator<T>, max?: number) {
+export async function takeAsync<T>(iter: AsyncIterable<T>, max?: number) {
   let r: T[] = []
   let counter = 0
   for await (const $ of iter) {
@@ -39,7 +39,9 @@ export function instrumentTransport(transport: Transport, name: string) {
     })
     transport.on("message", (data) => {
       try {
-        log(`  (message->${name}): ${JSON.stringify(serialize(data))}`)
+        const message = serialize(data)
+        const [messageType, messageNumber] = message ? parseMessageIdentifier(serialize(data).messageIdentifier) : [0, 0]
+        log(`  (message->${name}): ${messageType} ${messageNumber} ${JSON.stringify(serialize(data))}`)
       } catch (err) {
         console.error(err)
       }
