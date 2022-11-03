@@ -5,6 +5,7 @@ class Node<T> {
   constructor(public readonly value: T, public prev?: Node<T>) {}
 }
 
+// @internal
 export function linkedList<T>() {
   let head: Node<T> | undefined = undefined
   let tail: Node<T> | undefined = undefined
@@ -61,6 +62,7 @@ export function linkedList<T>() {
   return { enqueue, dequeue, isEmpty }
 }
 
+// @internal
 export function pushableChannel<T>(onIteratorClose: () => void) {
   let returnLock: (() => void) | null = null
   const queue = linkedList<{ value: T, resolve: LastResolver }>()
@@ -172,6 +174,9 @@ export function pushableChannel<T>(onIteratorClose: () => void) {
   return { iterable, push, close, failAndClose, isClosed, [Symbol.asyncIterator]: () => iterable }
 }
 
+/**
+ * @public
+ */
 export class AsyncQueue<T> implements AsyncGenerator<T> {
   // enqueues > dequeues
   values = linkedList<IteratorResult<T>>()

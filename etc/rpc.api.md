@@ -13,6 +13,45 @@ export type AsyncProcedureResultClient = Promise<Uint8Array | AsyncGenerator<Uin
 export type AsyncProcedureResultServer = Promise<Uint8Array | void> | AsyncGenerator<Uint8Array>;
 
 // @public (undocumented)
+export class AsyncQueue<T> implements AsyncGenerator<T> {
+    // (undocumented)
+    [Symbol.asyncIterator](): AsyncGenerator<T>;
+    constructor(requestingNext: (queue: AsyncQueue<T>, action: "next" | "close") => void);
+    // (undocumented)
+    close(error?: Error): void;
+    // (undocumented)
+    closed: boolean;
+    // (undocumented)
+    enqueue(value: T): void;
+    // (undocumented)
+    error: Error | undefined;
+    // (undocumented)
+    next(): Promise<IteratorResult<T>>;
+    // (undocumented)
+    return(value: any): Promise<IteratorResult<T>>;
+    // (undocumented)
+    settlers: {
+        enqueue: (value: {
+            resolve(x: IteratorResult<T>): void;
+            reject(error: Error): void;
+        }) => void;
+        dequeue: () => {
+            resolve(x: IteratorResult<T>): void;
+            reject(error: Error): void;
+        } | undefined;
+        isEmpty: () => boolean;
+    };
+    // (undocumented)
+    throw(error: Error): Promise<IteratorResult<T>>;
+    // (undocumented)
+    values: {
+        enqueue: (value: IteratorResult<T, any>) => void;
+        dequeue: () => IteratorResult<T, any> | undefined;
+        isEmpty: () => boolean;
+    };
+}
+
+// @public (undocumented)
 export type CallableProcedureClient = (payload: Uint8Array | AsyncIterable<Uint8Array>) => AsyncProcedureResultClient;
 
 // @public (undocumented)

@@ -10,6 +10,7 @@ import { inspect } from "util"
 import { MemoryTransport, MemoryTransportOptions } from "../src/transports/Memory"
 import { parseMessageIdentifier, parseProtocolMessage } from "../src/protocol/helpers"
 import { Reader } from "protobufjs/minimal"
+import { RpcMessageTypes } from "../src/protocol"
 
 // async Array.from(generator*) with support for max elements
 export async function takeAsync<T>(iter: AsyncIterable<T>, max?: number) {
@@ -29,6 +30,25 @@ function serialize(data: Uint8Array) {
   return ret[1]
 }
 
+function messageTypeToString(messageType: RpcMessageTypes) {
+  switch(messageType) {
+    case RpcMessageTypes.RpcMessageTypes_EMPTY: return 'EMPTY'
+    case RpcMessageTypes.RpcMessageTypes_REQUEST: return 'REQUEST'
+    case RpcMessageTypes.RpcMessageTypes_RESPONSE: return 'RESPONSE'
+    case RpcMessageTypes.RpcMessageTypes_STREAM_MESSAGE: return 'STREAM_MESSAGE'
+    case RpcMessageTypes.RpcMessageTypes_STREAM_ACK: return 'STREAM_ACK'
+    case RpcMessageTypes.RpcMessageTypes_CREATE_PORT: return 'CREATE_PORT'
+    case RpcMessageTypes.RpcMessageTypes_CREATE_PORT_RESPONSE: return 'CREATE_PORT_RESPONSE'
+    case RpcMessageTypes.RpcMessageTypes_REQUEST_MODULE: return 'REQUEST_MODULE'
+    case RpcMessageTypes.RpcMessageTypes_REQUEST_MODULE_RESPONSE: return 'REQUEST_MODULE_RESPONSE'
+    case RpcMessageTypes.RpcMessageTypes_REMOTE_ERROR_RESPONSE: return 'REMOTE_ERROR_RESPONSE'
+    case RpcMessageTypes.RpcMessageTypes_DESTROY_PORT: return 'DESTROY_PORT'
+    case RpcMessageTypes.RpcMessageTypes_SERVER_READY: return 'SERVER_READY'
+    case RpcMessageTypes.UNRECOGNIZED: return 'UNRECOGNIZED'
+  }
+  return messageType
+}
+
 export function instrumentTransport(transport: Transport, name: string) {
   if (typeof it == "function" && process.env.INSTRUMENT_TRANSPORT) {
     transport.on("close", (data) => {
@@ -41,7 +61,7 @@ export function instrumentTransport(transport: Transport, name: string) {
       try {
         const message = serialize(data)
         const [messageType, messageNumber] = message ? parseMessageIdentifier(serialize(data).messageIdentifier) : [0, 0]
-        log(`  (message->${name}): ${messageType} ${messageNumber} ${JSON.stringify(serialize(data))}`)
+        log(`  (message->${name}): ${messageTypeToString(messageType)} ${messageNumber} ${JSON.stringify(serialize(data))}`)
       } catch (err) {
         console.error(err)
       }
