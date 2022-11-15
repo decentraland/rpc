@@ -97,6 +97,9 @@ export function WebSocketTransport(socket: IWebSocket): Transport {
 
   const api: Transport = {
     ...events,
+    get isConnected() {
+      return socket.readyState === socket.OPEN
+    },
     sendMessage(message: any) {
       if (message instanceof Uint8Array) {
         if (socket.readyState === socket.OPEN) {

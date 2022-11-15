@@ -125,6 +125,7 @@ export type ServerModuleProcedure<Context> = {
 export type Transport = Pick<Emitter<TransportEvents>, "on" | "emit"> & {
     sendMessage(message: Uint8Array): void;
     close(): void;
+    readonly isConnected: boolean;
 };
 
 // @public (undocumented)

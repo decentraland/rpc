@@ -220,10 +220,12 @@ export async function createRpcClient(transport: Transport): Promise<RpcClient> 
   }
 
   // wait for transport to be connected
-  await new Promise<any>((resolve, reject) => {
-    transport.on("connect", resolve)
-    transport.on("error", reject)
-  })
+  if (!transport.isConnected) {
+    await new Promise<any>((resolve, reject) => {
+      transport.on("connect", resolve)
+      transport.on("error", reject)
+    })
+  }
 
   return {
     // the only objective of this function is to deduplicate asynchronous calls

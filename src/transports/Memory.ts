@@ -15,6 +15,7 @@ export function MemoryTransport(options?: MemoryTransportOptions) {
     let isClosed = false
     return {
       ...sender,
+      isConnected: !isClosed,
       sendMessage(message) {
         decouple(() => {
           receiver.emit("message", message)

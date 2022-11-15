@@ -11,6 +11,11 @@ export interface IWorker {
 export function WebWorkerTransport(worker: IWorker): Transport {
   const events = mitt<TransportEvents>()
 
+  let didConnect = false
+  events.on('connect', () => {
+    didConnect = true
+  })
+
   worker.addEventListener("message", () => events.emit("connect", {}), { once: true })
   worker.addEventListener("error", (err: any) => {
     if (err.error) {
@@ -39,6 +44,9 @@ export function WebWorkerTransport(worker: IWorker): Transport {
 
   const api: Transport = {
     ...events,
+    get isConnected() {
+      return true
+    },
     sendMessage(message) {
       if (message instanceof ArrayBuffer || message instanceof Uint8Array) {
         worker.postMessage(message)

@@ -29,6 +29,7 @@ export type Transport = Pick<Emitter<TransportEvents>, "on" | "emit"> & {
   /** sendMessage is used to send a message through the transport */
   sendMessage(message: Uint8Array): void
   close(): void
+  readonly isConnected: boolean
 }
 /**
  * @public
