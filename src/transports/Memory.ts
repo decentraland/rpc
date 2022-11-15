@@ -10,12 +10,14 @@ export function MemoryTransport(options?: MemoryTransportOptions) {
   const serverEd = mitt<TransportEvents>()
 
   const decouple = options?.decouplingFunction ?? ((cb) => cb())
+  let connected = false
 
   function configureMemoryTransport(receiver: Emitter<TransportEvents>, sender: Emitter<TransportEvents>): Transport {
     let isClosed = false
+
     return {
       ...sender,
-      isConnected: !isClosed,
+      isConnected: connected,
       sendMessage(message) {
         decouple(() => {
           receiver.emit("message", message)
@@ -33,7 +35,7 @@ export function MemoryTransport(options?: MemoryTransportOptions) {
   const client = configureMemoryTransport(clientEd, serverEd)
   const server = configureMemoryTransport(serverEd, clientEd)
 
-  let connected = false
+  
   client.on("message", (message) => {
     if (!connected) {
       connected = true
