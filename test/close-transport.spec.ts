@@ -33,7 +33,7 @@ test("Unit: server sendStream doesn't consume an element from the generator unle
     addListener: function (messageNumber: number, handler: (reader: Reader, messageType: number, messageNumber: number, message: any) => void): void {
       throw new Error("Function not implemented.")
     },
-    async addOneTimeListener(){
+    async addOneTimeListener() {
       throw new Error("Function not implemented.")
     },
     removeListener: function (messageNumber: number): void {
@@ -86,7 +86,7 @@ test("Unit: server sendStream finalizes iterator upon failed ACK", async () => {
     addListener: function (messageNumber: number, handler: (reader: Reader, messageType: number, messageNumber: number, message: any) => void): void {
       throw new Error("Function not implemented.")
     },
-    async addOneTimeListener(){
+    async addOneTimeListener() {
       throw new Error("Function not implemented.")
     },
     removeListener: function (messageNumber: number): void {
@@ -148,7 +148,7 @@ test("Unit: server sendStream sends a close message after iterator finalizes", a
     addListener: function (messageNumber: number, handler: (reader: Reader, messageType: number, messageNumber: number, message: any) => void): void {
       throw new Error("Function not implemented.")
     },
-    async addOneTimeListener(){
+    async addOneTimeListener() {
       throw new Error("Function not implemented.")
     },
     removeListener: function (messageNumber: number): void {
@@ -268,7 +268,6 @@ describe("Throw in client iterator closes remote iterator", () => {
     expect(await didClose).toEqual(undefined)
   })
 })
-
 
 describe("Throw in client iterator closes remote iterator after receiving a message", () => {
   const didClose = future<any>()
@@ -466,7 +465,7 @@ describe("Close transport closes client streams (client side)", () => {
   const testEnv = createSimpleTestEnvironment<void>(async function (port) {
     port.registerModule("echo", async (port) => ({
       async infiniteClientStream(gen: AsyncIterable<Uint8Array>): Promise<void> {
-        for await (const _ of gen) {}
+        for await (const _ of gen) { }
       }
     }))
   })
@@ -508,7 +507,7 @@ describe("Close transport closes client streams (server side)", () => {
   const testEnv = createSimpleTestEnvironment<void>(async function (port) {
     port.registerModule("echo", async (port) => ({
       async infiniteClientStream(gen: AsyncIterable<Uint8Array>): Promise<void> {
-        for await (const _ of gen) {}
+        for await (const _ of gen) { }
       }
     }))
   })
@@ -544,7 +543,6 @@ describe("Close transport closes client streams (server side)", () => {
     expect(infiniteStreamClosed).toBeTruthy()
   })
 })
-
 
 describe("Error in server transport closes the iterators", () => {
   let infiniteStreamClosed = false
