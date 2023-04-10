@@ -14,3 +14,4 @@ src/protocol/index.ts
 test/codegen/client.ts
 test/benchmarks/compiled
 perf
+*.zip

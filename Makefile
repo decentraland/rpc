@@ -1,4 +1,4 @@
-PROTOBUF_VERSION = 3.19.1
+PROTOBUF_VERSION = 22.2
 PROTOC ?= protoc
 UNAME := $(shell uname)
 PROTO_FILES := $(wildcard src/*.proto)
