@@ -4,11 +4,13 @@ import mitt from "mitt"
 export interface IWorker {
   terminate?(): void
   close?(): void
-  postMessage(message: any): void
+  postMessage(message: any, transferrables?: any[]): void
   addEventListener(type: "message" | "error", listener: Function, options?: any): void
 }
 
-export function WebWorkerTransport(worker: IWorker): Transport {
+export type WebWorkerOptions = Partial<{ useTransferrableObjects: boolean }>
+
+export function WebWorkerTransport(worker: IWorker, options: WebWorkerOptions = {}): Transport {
   const events = mitt<TransportEvents>()
 
   let didConnect = false
@@ -49,7 +51,11 @@ export function WebWorkerTransport(worker: IWorker): Transport {
     },
     sendMessage(message) {
       if (message instanceof ArrayBuffer || message instanceof Uint8Array) {
-        worker.postMessage(message)
+        if (options.useTransferrableObjects) {
+          worker.postMessage(message, [message])
+        } else {
+          worker.postMessage(message)
+        }
       } else {
         throw new Error(`WebWorkerTransport: Received unknown type of message, expecting Uint8Array`)
       }
@@ -57,10 +63,10 @@ export function WebWorkerTransport(worker: IWorker): Transport {
     close() {
       if ("terminate" in worker) {
         // tslint:disable-next-line:semicolon
-        ;(worker as any).terminate()
+        ; (worker as any).terminate()
       } else if ("close" in worker) {
         // tslint:disable-next-line:semicolon
-        ;(worker as any).close()
+        ; (worker as any).close()
       }
       events.emit('close', {})
     },
