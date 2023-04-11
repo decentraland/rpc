@@ -4,11 +4,11 @@ import mitt from "mitt"
 export interface IWorker {
   terminate?(): void
   close?(): void
-  postMessage(message: any, transferrables?: any[]): void
+  postMessage(message: any, transferables?: any[]): void
   addEventListener(type: "message" | "error", listener: Function, options?: any): void
 }
 
-export type WebWorkerOptions = Partial<{ useTransferrableObjects: boolean }>
+export type WebWorkerOptions = Partial<{ useTransferableObjects: boolean }>
 
 export function WebWorkerTransport(worker: IWorker, options: WebWorkerOptions = {}): Transport {
   const events = mitt<TransportEvents>()
@@ -53,7 +53,7 @@ export function WebWorkerTransport(worker: IWorker, options: WebWorkerOptions = 
     },
     sendMessage(message) {
       if (message instanceof ArrayBuffer || message instanceof Uint8Array) {
-        if (options.useTransferrableObjects) {
+        if (options.useTransferableObjects) {
           worker.postMessage(message.buffer, [message.buffer])
         } else {
           worker.postMessage(message)
