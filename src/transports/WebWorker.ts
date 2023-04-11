@@ -37,8 +37,10 @@ export function WebWorkerTransport(worker: IWorker, options: WebWorkerOptions = 
   })
 
   worker.addEventListener("message", (message: any) => {
-    if (message.data instanceof ArrayBuffer || message.data instanceof Uint8Array) {
+    if (message.data instanceof Uint8Array) {
       events.emit("message", message.data)
+    } else if (message.data instanceof ArrayBuffer) {
+      events.emit("message", new Uint8Array(message.data))
     } else {
       throw new Error(`WebWorkerTransport: Received unknown type of message, expecting Uint8Array`)
     }
@@ -52,7 +54,7 @@ export function WebWorkerTransport(worker: IWorker, options: WebWorkerOptions = 
     sendMessage(message) {
       if (message instanceof ArrayBuffer || message instanceof Uint8Array) {
         if (options.useTransferrableObjects) {
-          worker.postMessage(message, [message])
+          worker.postMessage(message.buffer, [message.buffer])
         } else {
           worker.postMessage(message)
         }
