@@ -4,13 +4,11 @@ import mitt from "mitt"
 export interface IWorker {
   terminate?(): void
   close?(): void
-  postMessage(message: any, transferables?: any[]): void
+  postMessage(message: any): void
   addEventListener(type: "message" | "error", listener: Function, options?: any): void
 }
 
-export type WebWorkerOptions = Partial<{ useTransferableObjects: boolean }>
-
-export function WebWorkerTransport(worker: IWorker, options: WebWorkerOptions = {}): Transport {
+export function WebWorkerTransport(worker: IWorker): Transport {
   const events = mitt<TransportEvents>()
 
   let didConnect = false
@@ -37,10 +35,8 @@ export function WebWorkerTransport(worker: IWorker, options: WebWorkerOptions = 
   })
 
   worker.addEventListener("message", (message: any) => {
-    if (message.data instanceof Uint8Array) {
+    if (message.data instanceof ArrayBuffer || message.data instanceof Uint8Array) {
       events.emit("message", message.data)
-    } else if (message.data instanceof ArrayBuffer) {
-      events.emit("message", new Uint8Array(message.data))
     } else {
       throw new Error(`WebWorkerTransport: Received unknown type of message, expecting Uint8Array`)
     }
@@ -53,11 +49,7 @@ export function WebWorkerTransport(worker: IWorker, options: WebWorkerOptions = 
     },
     sendMessage(message) {
       if (message instanceof ArrayBuffer || message instanceof Uint8Array) {
-        if (options.useTransferableObjects) {
-          worker.postMessage(message.buffer, [message.buffer])
-        } else {
-          worker.postMessage(message)
-        }
+        worker.postMessage(message)
       } else {
         throw new Error(`WebWorkerTransport: Received unknown type of message, expecting Uint8Array`)
       }
@@ -65,10 +57,10 @@ export function WebWorkerTransport(worker: IWorker, options: WebWorkerOptions = 
     close() {
       if ("terminate" in worker) {
         // tslint:disable-next-line:semicolon
-        ; (worker as any).terminate()
+        ;(worker as any).terminate()
       } else if ("close" in worker) {
         // tslint:disable-next-line:semicolon
-        ; (worker as any).close()
+        ;(worker as any).close()
       }
       events.emit('close', {})
     },

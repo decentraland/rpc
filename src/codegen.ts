@@ -3,13 +3,15 @@ import {
   RawClient,
   TsProtoMethodDefinition,
   TsProtoServiceDefinition,
+  UnaryMethodImplementation,
   ServerStreamingMethod,
   UnaryClientMethod,
   RawServiceImplementation,
+  MethodImplementation,
   ClientStreamingMethod,
   BidirectionalStreamingMethod,
 } from "./codegen-types"
-import { RpcClientPort, RpcServerPort } from "./types"
+import { CallableProcedureClient, RpcClientPort, RpcServerPort } from "./types"
 
 const EMPTY_U8ARRAY = new Uint8Array()
 
