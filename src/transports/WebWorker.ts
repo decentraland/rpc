@@ -45,7 +45,7 @@ export function WebWorkerTransport(worker: IWorker): Transport {
   const api: Transport = {
     ...events,
     get isConnected() {
-      return true
+      return didConnect
     },
     sendMessage(message) {
       if (message instanceof ArrayBuffer || message instanceof Uint8Array) {
@@ -57,10 +57,10 @@ export function WebWorkerTransport(worker: IWorker): Transport {
     close() {
       if ("terminate" in worker) {
         // tslint:disable-next-line:semicolon
-        ;(worker as any).terminate()
+        ; (worker as any).terminate()
       } else if ("close" in worker) {
         // tslint:disable-next-line:semicolon
-        ;(worker as any).close()
+        ; (worker as any).close()
       }
       events.emit('close', {})
     },
