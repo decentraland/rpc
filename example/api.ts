@@ -22,8 +22,8 @@ function createBaseBook(): Book {
   return { isbn: 0, title: "", author: "" };
 }
 
-export const Book = {
-  encode(message: Book, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+export namespace Book {
+  export function encode(message: Book, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
     if (message.isbn !== 0) {
       writer.uint32(8).int64(message.isbn);
     }
@@ -34,9 +34,9 @@ export const Book = {
       writer.uint32(26).string(message.author);
     }
     return writer;
-  },
+  }
 
-  decode(input: _m0.Reader | Uint8Array, length?: number): Book {
+  export function decode(input: _m0.Reader | Uint8Array, length?: number): Book {
     const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseBook();
@@ -44,77 +44,77 @@ export const Book = {
       const tag = reader.uint32();
       switch (tag >>> 3) {
         case 1:
-          if (tag != 8) {
+          if (tag !== 8) {
             break;
           }
 
           message.isbn = longToNumber(reader.int64() as Long);
           continue;
         case 2:
-          if (tag != 18) {
+          if (tag !== 18) {
             break;
           }
 
           message.title = reader.string();
           continue;
         case 3:
-          if (tag != 26) {
+          if (tag !== 26) {
             break;
           }
 
           message.author = reader.string();
           continue;
       }
-      if ((tag & 7) == 4 || tag == 0) {
+      if ((tag & 7) === 4 || tag === 0) {
         break;
       }
       reader.skipType(tag & 7);
     }
     return message;
-  },
+  }
 
-  fromJSON(object: any): Book {
+  export function fromJSON(object: any): Book {
     return {
       isbn: isSet(object.isbn) ? Number(object.isbn) : 0,
       title: isSet(object.title) ? String(object.title) : "",
       author: isSet(object.author) ? String(object.author) : "",
     };
-  },
+  }
 
-  toJSON(message: Book): unknown {
+  export function toJSON(message: Book): unknown {
     const obj: any = {};
     message.isbn !== undefined && (obj.isbn = Math.round(message.isbn));
     message.title !== undefined && (obj.title = message.title);
     message.author !== undefined && (obj.author = message.author);
     return obj;
-  },
+  }
 
-  create<I extends Exact<DeepPartial<Book>, I>>(base?: I): Book {
+  export function create<I extends Exact<DeepPartial<Book>, I>>(base?: I): Book {
     return Book.fromPartial(base ?? {});
-  },
+  }
 
-  fromPartial<I extends Exact<DeepPartial<Book>, I>>(object: I): Book {
+  export function fromPartial<I extends Exact<DeepPartial<Book>, I>>(object: I): Book {
     const message = createBaseBook();
     message.isbn = object.isbn ?? 0;
     message.title = object.title ?? "";
     message.author = object.author ?? "";
     return message;
-  },
-};
+  }
+}
 
 function createBaseGetBookRequest(): GetBookRequest {
   return { isbn: 0 };
 }
 
-export const GetBookRequest = {
-  encode(message: GetBookRequest, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+export namespace GetBookRequest {
+  export function encode(message: GetBookRequest, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
     if (message.isbn !== 0) {
       writer.uint32(8).int64(message.isbn);
     }
     return writer;
-  },
+  }
 
-  decode(input: _m0.Reader | Uint8Array, length?: number): GetBookRequest {
+  export function decode(input: _m0.Reader | Uint8Array, length?: number): GetBookRequest {
     const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseGetBookRequest();
@@ -122,55 +122,55 @@ export const GetBookRequest = {
       const tag = reader.uint32();
       switch (tag >>> 3) {
         case 1:
-          if (tag != 8) {
+          if (tag !== 8) {
             break;
           }
 
           message.isbn = longToNumber(reader.int64() as Long);
           continue;
       }
-      if ((tag & 7) == 4 || tag == 0) {
+      if ((tag & 7) === 4 || tag === 0) {
         break;
       }
       reader.skipType(tag & 7);
     }
     return message;
-  },
+  }
 
-  fromJSON(object: any): GetBookRequest {
+  export function fromJSON(object: any): GetBookRequest {
     return { isbn: isSet(object.isbn) ? Number(object.isbn) : 0 };
-  },
+  }
 
-  toJSON(message: GetBookRequest): unknown {
+  export function toJSON(message: GetBookRequest): unknown {
     const obj: any = {};
     message.isbn !== undefined && (obj.isbn = Math.round(message.isbn));
     return obj;
-  },
+  }
 
-  create<I extends Exact<DeepPartial<GetBookRequest>, I>>(base?: I): GetBookRequest {
+  export function create<I extends Exact<DeepPartial<GetBookRequest>, I>>(base?: I): GetBookRequest {
     return GetBookRequest.fromPartial(base ?? {});
-  },
+  }
 
-  fromPartial<I extends Exact<DeepPartial<GetBookRequest>, I>>(object: I): GetBookRequest {
+  export function fromPartial<I extends Exact<DeepPartial<GetBookRequest>, I>>(object: I): GetBookRequest {
     const message = createBaseGetBookRequest();
     message.isbn = object.isbn ?? 0;
     return message;
-  },
-};
+  }
+}
 
 function createBaseQueryBooksRequest(): QueryBooksRequest {
   return { authorPrefix: "" };
 }
 
-export const QueryBooksRequest = {
-  encode(message: QueryBooksRequest, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+export namespace QueryBooksRequest {
+  export function encode(message: QueryBooksRequest, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
     if (message.authorPrefix !== "") {
       writer.uint32(10).string(message.authorPrefix);
     }
     return writer;
-  },
+  }
 
-  decode(input: _m0.Reader | Uint8Array, length?: number): QueryBooksRequest {
+  export function decode(input: _m0.Reader | Uint8Array, length?: number): QueryBooksRequest {
     const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseQueryBooksRequest();
@@ -178,41 +178,41 @@ export const QueryBooksRequest = {
       const tag = reader.uint32();
       switch (tag >>> 3) {
         case 1:
-          if (tag != 10) {
+          if (tag !== 10) {
             break;
           }
 
           message.authorPrefix = reader.string();
           continue;
       }
-      if ((tag & 7) == 4 || tag == 0) {
+      if ((tag & 7) === 4 || tag === 0) {
         break;
       }
       reader.skipType(tag & 7);
     }
     return message;
-  },
+  }
 
-  fromJSON(object: any): QueryBooksRequest {
+  export function fromJSON(object: any): QueryBooksRequest {
     return { authorPrefix: isSet(object.authorPrefix) ? String(object.authorPrefix) : "" };
-  },
+  }
 
-  toJSON(message: QueryBooksRequest): unknown {
+  export function toJSON(message: QueryBooksRequest): unknown {
     const obj: any = {};
     message.authorPrefix !== undefined && (obj.authorPrefix = message.authorPrefix);
     return obj;
-  },
+  }
 
-  create<I extends Exact<DeepPartial<QueryBooksRequest>, I>>(base?: I): QueryBooksRequest {
+  export function create<I extends Exact<DeepPartial<QueryBooksRequest>, I>>(base?: I): QueryBooksRequest {
     return QueryBooksRequest.fromPartial(base ?? {});
-  },
+  }
 
-  fromPartial<I extends Exact<DeepPartial<QueryBooksRequest>, I>>(object: I): QueryBooksRequest {
+  export function fromPartial<I extends Exact<DeepPartial<QueryBooksRequest>, I>>(object: I): QueryBooksRequest {
     const message = createBaseQueryBooksRequest();
     message.authorPrefix = object.authorPrefix ?? "";
     return message;
-  },
-};
+  }
+}
 
 export type BookServiceDefinition = typeof BookServiceDefinition;
 export const BookServiceDefinition = {

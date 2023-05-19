@@ -34,9 +34,9 @@ install: install_compiler
 
 test:
 	${PROTOC} \
-		--plugin=./node_modules/.bin/protoc-gen-ts_proto \
-		--ts_proto_opt=esModuleInterop=true,returnObservable=false,outputServices=generic-definitions \
-		--ts_proto_out="$(PWD)/test/codegen" \
+		--plugin=./node_modules/.bin/protoc-gen-dcl_ts_proto \
+		--dcl_ts_proto_opt=esModuleInterop=true,returnObservable=false,outputServices=generic-definitions \
+		--dcl_ts_proto_out="$(PWD)/test/codegen" \
 		-I="$(PWD)/test/codegen" \
 		"$(PWD)/test/codegen/client.proto"
 	SIMMULATE_JITTER=false node_modules/.bin/jest --detectOpenHandles --colors --runInBand $(TESTARGS) --coverage $(TEST_FILE)
@@ -51,9 +51,9 @@ build:
 	@rm -rf dist || true
 	@mkdir -p dist
 	${PROTOC} \
-		--plugin=./node_modules/.bin/protoc-gen-ts_proto \
-		--ts_proto_opt=esModuleInterop=true \
-		--ts_proto_out="$(PWD)/src/protocol" \
+		--plugin=./node_modules/.bin/protoc-gen-dcl_ts_proto \
+		--dcl_ts_proto_opt=esModuleInterop=true \
+		--dcl_ts_proto_out="$(PWD)/src/protocol" \
 		-I="$(PWD)/src/protocol" \
 		"$(PWD)/src/protocol/index.proto"
 	@cp -r src/protocol dist/protocol

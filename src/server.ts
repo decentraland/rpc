@@ -70,8 +70,6 @@ function getServerReadyMessage() {
   return unsafeSyncWriter.finish()
 }
 
-const transportStartMessageSerialized = getServerReadyMessage()
-
 function moduleProcedures<Context>(module: ServerModuleDefinition<Context>) {
   return Array.from(Object.entries(module)).filter(([name, value]) => typeof value == "function")
 }
@@ -460,7 +458,7 @@ export function createRpcServer<Context = {}>(options: CreateRpcServerOptions<Co
       })
 
       // send the signal to the transport
-      newTransport.sendMessage(transportStartMessageSerialized)
+      newTransport.sendMessage(getServerReadyMessage())
     },
   }
 }
